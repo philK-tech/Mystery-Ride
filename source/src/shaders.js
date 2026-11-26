@@ -7,26 +7,33 @@ const GLSL_ZONE = `
 const float LOOP_LEN = ` + LOOP_LENGTH.toFixed(1) + `;
 const float ZONE_FADE = ` + ZONE_FADE.toFixed(1) + `;
 
+const vec4 ZONE_BOUNDS = vec4(` + ZONE_BOUNDS.map((v) => v.toFixed(1)).join(", ") + `);
 // Anteile der drei Zonen an der Stelle z (wie zoneWeights in math.js)
 vec3 zoneWeights(float z) {
-  float u = mod(-z, LOOP_LEN) / LOOP_LEN * 3.0;
-  float tw = ZONE_FADE / LOOP_LEN * 3.0;
+  float d = mod(-z, LOOP_LEN);
   vec3 w;
   for (int k = 0; k < 3; k++) {
-    float fk = float(k), acc = 0.0;
+    float b0 = ZONE_BOUNDS[k], b1 = ZONE_BOUNDS[k + 1], acc = 0.0;
     for (int s = -1; s <= 1; s++) {
-      float uu = u + float(s) * 3.0;
-      acc += smoothstep(fk - tw, fk + tw, uu) - smoothstep(fk + 1.0 - tw, fk + 1.0 + tw, uu);
+      float dd = d + float(s) * LOOP_LEN;
+      acc += smoothstep(b0 - ZONE_FADE, b0 + ZONE_FADE, dd) - smoothstep(b1 - ZONE_FADE, b1 + ZONE_FADE, dd);
     }
     w[k] = clamp(acc, 0.0, 1.0);
   }
   return w / max(w.x + w.y + w.z, 1e-3);
+}
+// Verlies unter dem Schloss (wie vaultWeight in math.js)
+float vaultWeight(float z) {
+  float d = mod(-z, LOOP_LEN);
+  return smoothstep(` + (VAULT_START - VAULT_FADE).toFixed(1) + `, ` + (VAULT_START + VAULT_FADE).toFixed(1) + `, d) * (1.0 - smoothstep(` + (VAULT_END - VAULT_FADE).toFixed(1) + `, ` + (VAULT_END + VAULT_FADE).toFixed(1) + `, d));
 }
 `;
 
 const GLSL_COMMON = `
 // Anteile der Zonen für die Kamera (Himmel, Nebelfarbe), vom Programm gesetzt
 uniform vec3 uZoneW;
+// Anteil des Verlieses an der Stelle der Kamera (kein Himmel, dichter kühler Nebel)
+uniform float uVault;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
@@ -245,7 +252,7 @@ vec3 skyColor(vec3 dir, float t) {
   if (uZoneW.x > 0.001) c += skyA(dir, t) * uZoneW.x;
   if (uZoneW.y > 0.001) c += skyB(dir, t) * uZoneW.y;
   if (uZoneW.z > 0.001) c += skyC(dir, t) * uZoneW.z;
-  return c;
+  return mix(c, vec3(0.004, 0.005, 0.007), uVault);
 }
 
 // Dunst am Horizont der jeweiligen Zone (für den Nebel)
@@ -254,7 +261,7 @@ vec3 skyHaze(vec3 dir) {
   vec3 hb = vec3(0.010, 0.026, 0.055) + vec3(0.020, 0.055, 0.10) * pow(g, 6.0);
   vec3 ha = vec3(0.028, 0.032, 0.04) + vec3(0.03, 0.025, 0.015) * pow(max(dot(dir, SUN_A), 0.0), 8.0);
   vec3 hc = vec3(0.42, 0.5, 0.72);
-  return ha * uZoneW.x + hb * uZoneW.y + hc * uZoneW.z;
+  return mix(ha * uZoneW.x + hb * uZoneW.y + hc * uZoneW.z, vec3(0.025, 0.035, 0.048), uVault);
 }
 
 // Höhennebel: dicht über dem Wasser und am Boden, dünn in der Höhe, mit treibenden Schwaden.
@@ -278,6 +285,7 @@ vec3 applyFog(vec3 col, vec3 wp, vec3 camPos, float t) {
   float wisp = smoothstep(0.42, 0.75, fbm(wp.xz * 0.035 + vec2(t * 0.025, t * 0.01)));
   float ground = exp(-max(wp.y, 0.0) * 0.45) * wisp;
   zoneDens += fw.x * uZoneW.x * ground * 9.0;
+  zoneDens *= 1.0 + 0.8 * uVault;
   float dens = 0.0105 * zoneDens * exp(-fall * (h0 - 0.5)) * swirl;
   float f = 1.0 - exp(-dens * max(dist - 4.0, 0.0) * k);
   vec3 fc = skyHaze(dir) + vec3(0.0, 0.020, 0.028) * exp(-max(wp.y, 0.0) * 0.25) * uZoneW.y;
@@ -523,10 +531,10 @@ void main() {
     float shore = vExtra.x;
     float foam = smoothstep(0.25, 0.95, shore) * (0.5 + 0.5 * vnoise(q * 3.0 + flow * 2.0));
     col += vec3(0.05, 0.55, 0.75) * foam * 0.18 * wave * react * emScale;
-    col += vec3(0.6, 0.65, 0.7) * foam * 0.08 * (zw.x + zw.z);
+    col += vec3(0.6, 0.65, 0.7) * foam * 0.08 * (zw.x * (1.0 - vaultWeight(vWorldPos.z)) + zw.z);
     // Glanz von Mond bzw. Sonne
     col += vec3(0.4, 0.6, 0.9) * pow(max(dot(N, normalize(MOON_DIR + V)), 0.0), 220.0) * 1.5 * zw.y;
-    col += vec3(0.6, 0.7, 0.85) * pow(max(dot(N, normalize(SUN_A + V)), 0.0), 220.0) * 2.0 * zw.x;
+    col += vec3(0.6, 0.7, 0.85) * pow(max(dot(N, normalize(SUN_A + V)), 0.0), 220.0) * 2.0 * zw.x * (1.0 - vaultWeight(vWorldPos.z)); // im Verlies kein Mond
     col += vec3(1.0, 0.95, 0.85) * pow(max(dot(N, normalize(SUN_C + V)), 0.0), 300.0) * 8.0 * zw.z;
     col = applyFog(col, vWorldPos, uCamPos, t);
     fragColor = vec4(clamp(col, vec3(0.0), vec3(30.0)), 1.0);
@@ -974,9 +982,10 @@ void main() {
   }
   float wrap = foliage ? 0.45 : 0.0;
   if (zw.x > 0.001) {
-    // Nebelwald: fahles, kaltes Mondlicht, sehr wenig Himmelslicht
-    float ndl = max((dot(N, SUN_A) + wrap) / (1.0 + wrap), 0.0);
-    vec3 amb = mix(vec3(0.018, 0.02, 0.025), vec3(0.05, 0.06, 0.08), hemi) * ao;
+    // Nebelwald: fahles, kaltes Mondlicht, sehr wenig Himmelslicht. Im Verlies kein Mond, fast kein Umgebungslicht.
+    float vlt = vaultWeight(vWorldPos.z);
+    float ndl = max((dot(N, SUN_A) + wrap) / (1.0 + wrap), 0.0) * (1.0 - vlt);
+    vec3 amb = mix(mix(vec3(0.018, 0.02, 0.025), vec3(0.05, 0.06, 0.08), hemi), vec3(0.004, 0.005, 0.007), vlt) * ao;
     float spec = pow(max(dot(N, normalize(SUN_A + V)), 0.0), specPow) * (0.02 + wet * 0.35);
     vec3 c = albA * (amb + vec3(0.38, 0.38, 0.42) * ndl * mix(1.0, ao, 0.5)) + vec3(0.6, 0.6, 0.6) * spec * ao * 0.6;
     c += vec3(0.12, 0.14, 0.18) * rim * 0.08 * ao;

@@ -197,6 +197,7 @@ function drawFigures(pass, vp, cam) {
   const u = progSkin.u;
   gl.useProgram(progSkin.prog);
   gl.uniform3fv(u.uZoneW, camZone);
+  gl.uniform1f(u.uVault, camVault);
   gl.uniformMatrix4fv(u.uViewProj, false, vp);
   gl.uniform1f(u.uTime, state.time);
   gl.uniform3fv(u.uCamPos, cam);

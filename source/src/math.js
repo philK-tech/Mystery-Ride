@@ -1,6 +1,6 @@
 // math.js: Mathe, Noise, Flussverlauf und Mat4
 // --- Math & Noise Utilities ---
-const LOOP_LENGTH = 480.0;
+const LOOP_LENGTH = 560.0;
 
 function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -56,20 +56,31 @@ function pnoise(x, z, scale, octaves) {
   const s = -z / LOOP_LENGTH;
   return lerp(fbm2(x * scale, z * scale, octaves), fbm2(x * scale, (z + LOOP_LENGTH) * scale, octaves), s);
 }
-// Drei Zonen hintereinander: 0 Nebeltal, 1 Pilzwald, 2 Himmelsinseln, je ein Drittel der Schleife.
+// Drei Zonen hintereinander: 0 Nebeltal (mit dem Verlies darunter), 1 Pilzwald, 2 Himmelsinseln.
+// ZONE_BOUNDS: Grenzen als Abstand vom Start (z läuft nach -z). Zone A: Nebelwald 0..160 plus Verlies 160..240.
 // zoneWeights liefert für eine Stelle z die Anteile der drei Zonen (Summe 1), mit kurzen Übergängen.
+const ZONE_BOUNDS = [0.0, 240.0, 400.0, 560.0];
 const ZONE_FADE = 14.0; // halbe Länge eines Übergangs in Einheiten
 function zoneWeights(z, out = [0, 0, 0]) {
-  const u = (-wrapZ(z) / LOOP_LENGTH) * 3.0;
-  const tw = (ZONE_FADE / LOOP_LENGTH) * 3.0;
+  const d = -wrapZ(z);
   for (let k = 0; k < 3; k++) {
+    const b0 = ZONE_BOUNDS[k], b1 = ZONE_BOUNDS[k + 1];
     let w = 0;
-    for (const s of [-3, 0, 3]) w += smoothstep(k - tw, k + tw, u + s) - smoothstep(k + 1 - tw, k + 1 + tw, u + s);
+    for (const s of [-LOOP_LENGTH, 0, LOOP_LENGTH]) {
+      const dd = d + s;
+      w += smoothstep(b0 - ZONE_FADE, b0 + ZONE_FADE, dd) - smoothstep(b1 - ZONE_FADE, b1 + ZONE_FADE, dd);
+    }
     out[k] = clamp01(w);
   }
   const sum = out[0] + out[1] + out[2] || 1;
   out[0] /= sum; out[1] /= sum; out[2] /= sum;
   return out;
+}
+// Verlies unter dem Schloss: 0 außerhalb, 1 innen, weiche Übergänge an Ein- und Ausgang (wie im Shader)
+const VAULT_START = 160.0, VAULT_END = 240.0, VAULT_FADE = 6.0;
+function vaultWeight(z) {
+  const d = -wrapZ(z);
+  return smoothstep(VAULT_START - VAULT_FADE, VAULT_START + VAULT_FADE, d) * (1.0 - smoothstep(VAULT_END - VAULT_FADE, VAULT_END + VAULT_FADE, d));
 }
 
 // Höhe des Bodens an (x, z), identisch mit dem Terrain-Mesh.

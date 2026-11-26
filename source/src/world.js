@@ -1,16 +1,16 @@
 // world.js: Welt: Platzierung aller Objekte entlang der Strecke (nach dem Fahrtskript)
 // --- World Population ---
-// Zone 1 (z 0 bis -160): finsterer Nebelwald mit Schloss.  Zone 2 (bis -320): Pilzwald.  Zone 3 (bis -480): offene Ebene.
+// Zone A (z 0 bis -240): Nebelwald mit Schloss (bis -160), darunter das Verlies (-160 bis -240).  Zone B (bis -400): Pilzwald.  Zone C (bis -560): offene Ebene.
 
 // Szenen in Reihenfolge der Fahrt. Kommt das Boot auf `trigger` Einheiten heran, fährt es mit `slow` (Anteil des
 // normalen Tempos) weiter, die Kamera richtet sich auf das Geschehen und zoomt um `zoom` heran (siehe creatures.js).
 const SCENES = [
   { type: "wolf", z: -62, side: -1, dur: 10.5, trigger: 15, slow: 0.25, zoom: 0.55 },
   { type: "castle", z: -150, side: 1, dur: 12.5, trigger: 54, slow: 0.35, zoom: 0.3 },
-  { type: "fish", z: -214, side: 1, dur: 6.5, trigger: 14, slow: 0.4, zoom: 0.25 },
-  { type: "tentacles", z: -266, side: 1, dur: 10.5, trigger: 15, slow: 0.02, zoom: 0.0 },
-  { type: "herd", z: -362, side: -1, dur: 12.0, trigger: 30, slow: 0.45, zoom: 0.45 },
-  { type: "mantas", z: -422, side: 1, dur: 12.0, trigger: 36, slow: 0.45, zoom: 0.15 }
+  { type: "fish", z: -294, side: 1, dur: 6.5, trigger: 14, slow: 0.4, zoom: 0.25 },
+  { type: "tentacles", z: -346, side: 1, dur: 10.5, trigger: 15, slow: 0.02, zoom: 0.0 },
+  { type: "herd", z: -442, side: -1, dur: 12.0, trigger: 30, slow: 0.45, zoom: 0.45 },
+  { type: "mantas", z: -502, side: 1, dur: 12.0, trigger: 36, slow: 0.45, zoom: 0.15 }
 ];
 
 // Lichtung des Wolfs (halblinks) und sein Versteck im Wald dahinter
@@ -29,7 +29,9 @@ function wolfDen(sc) {
 const CLEARINGS = [
   { ...wolfSpot(SCENES[0]), r: 7.0 },
   { x: (wolfSpot(SCENES[0]).x + wolfDen(SCENES[0]).x) / 2, z: SCENES[0].z - 2.5, r: 4.0 },
-  { x: CASTLE.x, z: CASTLE.z, r: 14.0 }
+  { x: CASTLE.x, z: CASTLE.z, r: 14.0 },
+  { x: riverCenterX(-160), z: -160, r: 16.0 },
+  { x: riverCenterX(-240), z: -240, r: 16.0 }
 ];
 // Sichtachsen vom Fluss zum Schloss und zur Lichtung des Wolfs freihalten (aus Richtung des herankommenden Boots)
 function clearSightline(x, z, from, r0, r1) {
@@ -136,7 +138,7 @@ function buildWorld() {
 
   // dichter Wald: Nadelbäume (leicht schief, unterschiedlich hoch) und dazwischen Totholz
   for (let i = 0; i < 1500; i++) {
-    const p = bankSpot(i, 5.0, 3.5, 70.0, 1.6, -4.0, -172.0);
+    const p = bankSpot(i, 5.0, 3.5, 70.0, 1.6, -4.0, -158.0);
     if (inClearing(p.x, p.z) || !zoneChance(p.z, 1.0, 0.0, 0.0, hash2(i, 5.7))) continue;
     const h = Math.min(10.0 + hash2(i, 6.4) * 14.0, (p.reach - 2.5) / 0.38);
     if (h < 6.0) continue;
@@ -147,19 +149,19 @@ function buildWorld() {
   // ein wenig Unterholz: dunkle Farne, Büsche und umgestürzte Stämme (nichts leuchtet)
   const DARK = [0, 0, 0, 1];
   for (let i = 0; i < 200; i++) {
-    const p = bankSpot(i, 15.0, 0.6, 10.0, 1.4, 0.0, -165.0);
+    const p = bankSpot(i, 15.0, 0.6, 10.0, 1.4, 0.0, -158.0);
     if (inClearing(p.x, p.z, -2.0) || !zoneChance(p.z, 1.0, 0.0, 0.0, hash2(i, 15.9))) continue;
     const sc = 0.9 + hash2(i, 16.3) * 1.0;
     pushInst("ferns", [p.x, p.y - 0.05, p.z], rot(i, 17.4), 0, 0, [sc, sc, sc], DARK);
   }
   for (let i = 0; i < 130; i++) {
-    const p = bankSpot(i, 150.0, 1.5, 22.0, 1.3, 0.0, -165.0);
+    const p = bankSpot(i, 150.0, 1.5, 22.0, 1.3, 0.0, -158.0);
     if (inClearing(p.x, p.z, -2.0) || !zoneChance(p.z, 1.0, 0.0, 0.0, hash2(i, 150.9))) continue;
     const sc = 0.9 + hash2(i, 151.0) * 1.4;
     pushInst("bushes", [p.x, p.y - 0.25, p.z], rot(i, 152.0), 0, 0, [sc * 1.4, sc, sc * 1.4], DARK);
   }
   for (let i = 0; i < 26; i++) {
-    const p = bankSpot(i, 155.0, 1.5, 18.0, 1.2, 0.0, -165.0);
+    const p = bankSpot(i, 155.0, 1.5, 18.0, 1.2, 0.0, -158.0);
     if (inClearing(p.x, p.z) || !zoneChance(p.z, 1.0, 0.0, 0.0, hash2(i, 155.9))) continue;
     const L = 5.0 + hash2(i, 156.0) * 5.0;
     pushInst("logs", [p.x, p.y - 0.1, p.z], rot(i, 157.0), 0, (hash2(i, 158.0) - 0.5) * 0.1, [L, L * 0.9, L], DARK);
@@ -173,7 +175,7 @@ function buildWorld() {
   }
   // moosige Steine am Ufer, wenige
   for (let i = 0; i < 18; i++) {
-    const p = bankSpot(i, 1.0, 0.5, 8.0, 1.0, 0.0, -160.0);
+    const p = bankSpot(i, 1.0, 0.5, 8.0, 1.0, 0.0, -158.0);
     if (inClearing(p.x, p.z)) continue;
     const s = Math.min(0.8 + hash2(i, 2.7) * 1.6, (Math.abs(p.x - riverCenterX(p.z)) - 5.0) / 1.25);
     if (s < 0.5) continue;
@@ -188,13 +190,53 @@ function buildWorld() {
   // sparsam: ein schwacher Lichtkegel am Anfang, ein etwas deutlicherer hinter der Lichtung des Wolfs
   addShaft(riverCenterX(-20) + 8.0, -20, 1.0, 0.6);
 
+  // ---------------- Zone A2: Verlies unter dem Schloss (z -160 bis -240) ----------------
+  const VAULT_STONE = [0.14, 0.15, 0.19, 1];
+  const TORCH_WARM = [1.0, 0.62, 0.22, 1];
+  // Felstor am Eingang (z = -160) und Portalbogen am Ausgang in den Pilzwald (z = -240)
+  for (const [gz, yaw] of [[-160, 0], [-240, Math.PI]]) {
+    const cx = riverCenterX(gz);
+    const hw = riverHalfWidth(gz) + 2.6;
+    const slope = -Math.atan(riverSlopeX(gz));
+    pushInst("vaultGate", [cx, 0.0, gz], slope + yaw, 0, 0, [hw * 2.0, 13.5, 9.5], VAULT_STONE);
+  }
+  // Gewölberippen über den Fluss
+  [-172, -192, -212, -230].forEach((az) => {
+    const cx = riverCenterX(az);
+    const hw = riverHalfWidth(az) + 2.2;
+    const slope = -Math.atan(riverSlopeX(az));
+    pushInst("vaultArches", [cx, 0.0, az], slope, 0, 0, [hw * 2.0, 11.5, 4.2], VAULT_STONE);
+  });
+  // Kaimauern beidseitig des Flusses
+  const quayStep = 8.0;
+  for (let z = -164.0; z >= -236.0; z -= quayStep) {
+    const cx = riverCenterX(z);
+    const hw = riverHalfWidth(z);
+    const slope = -Math.atan(riverSlopeX(z));
+    for (const side of [-1, 1]) {
+      const qx = cx + side * (hw + 0.55);
+      pushInst("vaultQuays", [qx, 0.35, z], slope, 0, 0, [1.3, 1.4, quayStep + 0.4], VAULT_STONE);
+    }
+  }
+  // Säulen; an jeder zweiten hängt eine Fackel zum Fluss hin (abwechselnd links und rechts)
+  [-174, -194, -214, -232].forEach((cz, idx) => {
+    const cx = riverCenterX(cz);
+    const hw = riverHalfWidth(cz) + 1.25;
+    for (const side of [-1, 1]) {
+      pushInst("vaultColumns", [cx + side * hw, 4.6, cz], 0, 0, 0, [2.4, 9.6, 2.4], VAULT_STONE);
+    }
+    const side = idx % 2 === 0 ? -1 : 1;
+    const tx = cx + side * (hw - 0.36);
+    pushInst("vaultTorches", [tx, 3.3, cz], side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, 0, [2.2, 2.2, 2.2], TORCH_WARM);
+  });
+
   // ---------------- Zone 2: Pilzwald ----------------
   // dichte Riesenpilze direkt am Ufer; manche neigen sich als Baldachin über den Fluss
   const MUSH_TINTS = [CYAN, VIOLET, MAGENTA, BLUE];
   // Mindestabstand: Hüte dürfen sich nicht gegenseitig durchdringen (Abstand der Hutmitten > Summe der Hutradien)
   const caps = [];
   for (let i = 0; i < 700; i++) {
-    const p = bankSpot(i, 90.0, 0.5, 45.0, 2.0, -158.0, -322.0);
+    const p = bankSpot(i, 90.0, 0.5, 45.0, 2.0, -238.0, -402.0);
     if (!zoneChance(p.z, 0.0, 1.0, 0.0, hash2(i, 90.7))) continue;
     const canopy = p.bank < 4.0 && hash2(i, 91.5) < 0.5;
     let h = canopy ? 7.5 + hash2(i, 91.0) * 3.0 : (p.bank > 15 ? 7.0 : 3.5) + hash2(i, 91.0) * 5.0;
@@ -207,32 +249,32 @@ function buildWorld() {
     pushInst("giantMushrooms", [p.x, p.y - 0.2, p.z], rot(i, 92.0), 0, p.side * lean, [h, h, h], MUSH_TINTS[Math.floor(hash2(i, 94.0) * 4)]);
   }
   // Torbögen aus Pilzstämmen, unter denen die Fahrt hindurchführt
-  [-196, -244, -292].forEach((z, i) => {
+  [-276, -324, -372].forEach((z, i) => {
     const hw = riverHalfWidth(z) + 2.5;
     pushInst("mushroomArches", [riverCenterX(z), terrainHeight(riverCenterX(z) + hw, z) - 0.3, z], -Math.atan(riverSlopeX(z)), 0, 0,
       [hw, 9.5 + i, hw * 0.9], i === 1 ? VIOLET : CYAN);
   });
   // leuchtendes Schilf und Blütenkelche am Wasser, kleine Pilze
   for (let i = 0; i < 380; i++) {
-    const p = bankSpot(i, 25.0, -0.7, 2.0, 1.5, -150.0, -330.0);
+    const p = bankSpot(i, 25.0, -0.7, 2.0, 1.5, -242.0, -410.0);
     if (!zoneChance(p.z, 0.0, 1.0, 0.0, hash2(i, 25.9))) continue;
     const sc = 0.8 + hash2(i, 26.6) * 0.8;
     pushInst("reeds", [p.x, Math.max(p.y, -0.3) - 0.05, p.z], rot(i, 27.7), 0, 0, [sc, sc, sc], hash2(i, 28.0) < 0.6 ? CYAN : VIOLET);
   }
   for (let i = 0; i < 160; i++) {
-    const p = bankSpot(i, 30.0, 0.2, 5.0, 1.4, -158.0, -322.0);
+    const p = bankSpot(i, 30.0, 0.2, 5.0, 1.4, -242.0, -402.0);
     if (!zoneChance(p.z, 0.0, 1.0, 0.0, hash2(i, 30.9))) continue;
     const sc = 0.7 + hash2(i, 31.5) * 0.7;
     pushInst("buds", [p.x, p.y - 0.05, p.z], rot(i, 32.2), 0, 0, [sc, sc, sc], hash2(i, 33.0) < 0.6 ? CYAN : MAGENTA);
   }
   for (let i = 0; i < 110; i++) {
-    const p = bankSpot(i, 40.0, 0.4, 8.0, 1.3, -158.0, -322.0);
+    const p = bankSpot(i, 40.0, 0.4, 8.0, 1.3, -242.0, -402.0);
     if (!zoneChance(p.z, 0.0, 1.0, 0.0, hash2(i, 40.9))) continue;
     const sc = 0.6 + hash2(i, 42.9) * 1.0;
     pushInst("mushrooms", [p.x, p.y - 0.1, p.z], rot(i, 43.5), 0, 0, [sc, sc, sc], hash2(i, 44.0) < 0.5 ? VIOLET : CYAN);
   }
   for (let i = 0; i < 120; i++) {
-    const p = bankSpot(i, 20.0, 0.6, 9.0, 1.5, -158.0, -322.0);
+    const p = bankSpot(i, 20.0, 0.6, 9.0, 1.5, -242.0, -402.0);
     if (!zoneChance(p.z, 0.0, 1.0, 0.0, hash2(i, 20.9))) continue;
     const sc = 0.8 + hash2(i, 21.3) * 1.0;
     pushInst("broadleaves", [p.x, p.y - 0.05, p.z], rot(i, 22.4), 0, 0, [sc, sc, sc], hash2(i, 23.0) < 0.6 ? CYAN : VIOLET);
@@ -240,7 +282,7 @@ function buildWorld() {
   // farbiger Nebel knapp über den Pilzhüten: weiche Nebelballen in Violett und Türkis (erst alle violetten, dann alle türkisen)
   const mistV = [], mistT = [];
   for (let i = 0; i < 240; i++) {
-    const z = -168.0 - hash2(i, 500.0) * 146.0;
+    const z = -248.0 - hash2(i, 500.0) * 146.0;
     const side = hash2(i, 501.0) < 0.5 ? -1 : 1;
     const x = riverCenterX(z) + side * (riverHalfWidth(z) * 0.3 + hash2(i, 502.0) * 40.0);
     const p = [x, 9.0 + hash2(i, 503.0) * 7.0, z, 14.0 + hash2(i, 504.0) * 18.0, 0.07 + hash2(i, 505.0) * 0.07];
@@ -249,7 +291,7 @@ function buildWorld() {
 
   // einige Quallen hoch über dem Pilzwald
   for (let i = 0; i < 9; i++) {
-    const z = -175 - i * 16 - hash2(i, 45.0) * 6;
+    const z = -255 - i * 16 - hash2(i, 45.0) * 6;
     const x = riverCenterX(z) + (hash2(i, 46.1) - 0.5) * 16.0;
     const sc = 1.6 + hash2(i, 48.7) * 1.4;
     pushInst("jellyfish", [x, 16.0 + hash2(i, 47.4) * 9.0, z], rot(i, 49.2), 0, 0, [sc, sc, sc], hash2(i, 50.0) < 0.5 ? CYAN : VIOLET);
@@ -260,9 +302,9 @@ function buildWorld() {
   // jeder Felsen mit eigener Form: Insel mit flachem Becken und Wasserfall, breiter Tafelberg mit Stufen, gespaltener Fels.
   // Sie hängen nicht zu hoch, damit man von unten auf die gekippte Oberseite sieht.
   const floatingPeaks = [
-    { z: -360, offsetX: -86, y: 26, sx: 18, sy: 22, sz: 16, fall: true, build: null, variant: 0 },
-    { z: -404, offsetX: 96, y: 31, sx: 24, sy: 22, sz: 20, fall: false, build: "fortress", variant: 1 },
-    { z: -452, offsetX: 80, y: 23, sx: 17, sy: 20, sz: 15, fall: false, build: "ruins", variant: 2 }
+    { z: -440, offsetX: -86, y: 26, sx: 18, sy: 22, sz: 16, fall: true, build: null, variant: 0 },
+    { z: -484, offsetX: 96, y: 31, sx: 24, sy: 22, sz: 20, fall: false, build: "fortress", variant: 1 },
+    { z: -532, offsetX: 80, y: 23, sx: 17, sy: 20, sz: 15, fall: false, build: "ruins", variant: 2 }
   ];
   // Drehung, die die y-Achse auf u legt (Rodrigues), als Mat4 ohne Verschiebung
   const alignY = (u) => {
@@ -325,7 +367,7 @@ function buildWorld() {
 ;
   // Grasbüschel und wenige Wiesenblumen, sonst leer
   for (let i = 0; i < 700; i++) {
-    const p = bankSpot(i, 35.0, 0.0, 30.0, 1.3, -318.0, -482.0);
+    const p = bankSpot(i, 35.0, 0.0, 30.0, 1.3, -398.0, -562.0);
     if (!zoneChance(p.z, 0.0, 0.0, 1.0, hash2(i, 35.9))) continue;
     const sc = 0.8 + hash2(i, 36.4) * 0.9;
     if (hash2(i, 36.9) < 0.85) pushInst("reeds", [p.x, p.y - 0.05, p.z], rot(i, 37.8), 0, 0, [sc, sc * 1.3, sc], [0.6, 0.7, 0.3, 1]);
@@ -337,7 +379,7 @@ function buildWorld() {
   let tries = 0;
   while (dots.length < 22000 && tries < 300000) {
     const i = tries++;
-    const p = bankSpot(i, 60.0, -0.3, 22.0, 1.8, -150.0, -330.0);
+    const p = bankSpot(i, 60.0, -0.3, 22.0, 1.8, -230.0, -410.0);
     if (p.y < 0.02 || zoneWeights(p.z, zw)[1] < 0.3) continue;
     const patch = pnoise(p.x, p.z, 0.2, 2);
     if (patch < 0.46 + hash2(i, 61.0) * 0.12) continue;
@@ -429,6 +471,11 @@ function buildWorld() {
       inst("bushes", buildBushMesh(), 3.0),
       inst("logs", buildFallenLogMesh(), 6.0),
       inst("lanterns", buildLanternPostMesh(), 2.0),
+      inst("vaultGate", buildVaultGateMesh(), 16.0),
+      inst("vaultArches", buildVaultArchMesh(), 14.0),
+      inst("vaultQuays", buildVaultQuayWallMesh(), 10.0),
+      inst("vaultColumns", buildVaultColumnMesh(), 12.0),
+      inst("vaultTorches", buildVaultTorchMesh(), 4.0),
       inst("giantMushrooms", buildGiantMushroomMeshV2(), 14.0),
       inst("mushroomArches", buildMushroomArchMesh(), 14.0),
       inst("reeds", buildReedClusterMesh(), 2.0),

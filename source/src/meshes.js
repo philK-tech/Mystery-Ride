@@ -1199,3 +1199,67 @@ function buildMonolithRingMesh() {
   addLathe(b, 6, 6, (t) => { const a = Math.PI * 1.75 + t * 0.5; return [Math.cos(a) * 0.36, 0.9, Math.sin(a) * 0.36]; }, () => [0.02, 0.02], 36, () => [0.9, 0.0, 0.0]);
   return b;
 }
+
+// ---------------- Verlies unter dem Schloss ----------------
+// Felstor unter dem Schloss: schwerer Felsbogen mit seitlichen Flanken und Schlussstein
+function buildVaultGateMesh() {
+  const b = createGeometryBuilder();
+  const halfSpan = 0.5, pierW = 0.24, archH = 0.72, wallTop = 1.08, depth = 0.44;
+  addBox(b, [-(halfSpan - pierW * 0.5), wallTop * 0.5, 0], [pierW, wallTop, depth], 0, 0, 2, 0.0);
+  addBox(b, [(halfSpan - pierW * 0.5), wallTop * 0.5, 0], [pierW, wallTop, depth], 0, 0, 2, 0.0);
+  addBox(b, [0, archH + (wallTop - archH) * 0.5, 0], [halfSpan * 2.0, wallTop - archH, depth * 1.05], 0, 0, 2, 0.0);
+  const segs = 9, rArch = halfSpan - pierW;
+  for (let i = 0; i < segs; i++) {
+    const a0 = Math.PI * (1.0 - i / segs), a1 = Math.PI * (1.0 - (i + 1) / segs), am = 0.5 * (a0 + a1);
+    const bx = Math.cos(am) * rArch, by = (archH - rArch) + Math.sin(am) * rArch;
+    const isKeystone = i === Math.floor(segs / 2);
+    addBox(b, [bx, by, 0], [0.16, isKeystone ? 0.16 : 0.12, depth * 1.12], 0, am - Math.PI * 0.5, 36, isKeystone ? 0.4 : 0.0);
+  }
+  b.computeFacetedNormals();
+  return b;
+}
+
+// Gewölberippe über dem Fluss (Bogen aus Mauerwerk mit Stützansätzen)
+function buildVaultArchMesh() {
+  const b = createGeometryBuilder();
+  const segs = 12, rX = 0.5, rY = 0.62, baseY = 0.22;
+  for (let i = 0; i < segs; i++) {
+    const a0 = Math.PI * (1.0 - i / segs), a1 = Math.PI * (1.0 - (i + 1) / segs), am = 0.5 * (a0 + a1);
+    const segLen = (Math.PI * (rX + rY) * 0.5) / segs * 1.15;
+    addBox(b, [Math.cos(am) * rX, baseY + Math.sin(am) * rY, 0], [segLen, 0.14, 0.22], 0, am - Math.PI * 0.5, 36, 0.0);
+  }
+  addBox(b, [-rX, baseY * 0.5, 0], [0.18, baseY, 0.26], 0, 0, 36, 0.0);
+  addBox(b, [rX, baseY * 0.5, 0], [0.18, baseY, 0.26], 0, 0, 36, 0.0);
+  b.computeFacetedNormals();
+  return b;
+}
+
+// Kaimauer entlang des Ufers im Verlies (Quaderwand mit Brüstungskante)
+function buildVaultQuayWallMesh() {
+  const b = createGeometryBuilder();
+  addBox(b, [0, 0.0, 0], [0.24, 1.0, 1.0], 0, 0, 36, 0.0);
+  addBox(b, [0, 0.54, 0], [0.30, 0.08, 1.02], 0, 0, 36, 0.2);
+  b.computeFacetedNormals();
+  return b;
+}
+
+// Tragende Säule im Verlies (Sockel, Schaft, Kapitell)
+function buildVaultColumnMesh() {
+  const b = createGeometryBuilder();
+  addLathe(b, 2, 12, (t) => [0, -0.5 + t * 0.14, 0], () => [0.20, 0.20], 36, () => [0.7, 0.0, 0.0]);
+  addLathe(b, 8, 12, (t) => [0, -0.36 + t * 0.72, 0], (t) => {
+    const r = 0.14 * (1.0 - 0.12 * Math.sin(t * Math.PI));
+    return [r, r];
+  }, 36, (t) => [0.65 + 0.35 * t, 0.0, 0.0]);
+  addLathe(b, 2, 12, (t) => [0, 0.36 + t * 0.14, 0], () => [0.21, 0.21], 36, () => [0.9, 0.0, 0.0]);
+  return b;
+}
+
+// Wandfackel: Eisenhalterung (matId 36) und warme Flamme (matId 38, glowMask < 1.5 = warmes Licht)
+function buildVaultTorchMesh() {
+  const b = createGeometryBuilder();
+  addBox(b, [0, 0.0, 0.06], [0.06, 0.06, 0.16], 0, -0.25, 36, 0.0);
+  addBox(b, [0, 0.05, 0.13], [0.08, 0.12, 0.08], 0, 0, 36, 0.4);
+  addBox(b, [0, 0.15, 0.13], [0.055, 0.14, 0.055], 0.1, 0.15, 38, 0.0);
+  return b;
+}

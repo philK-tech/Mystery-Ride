@@ -79,8 +79,13 @@ canvas.addEventListener("pointercancel", endDrag);
 const ZONE_NAMES = ["Finsterer Nebelwald", "Wald der Riesenpilze", "Ebene der Schwebefelsen"];
 function updateChapterLabel(w) {
   const k = w[0] >= w[1] && w[0] >= w[2] ? 0 : w[1] >= w[2] ? 1 : 2;
-  if (chapterEl.textContent !== ZONE_NAMES[k]) chapterEl.textContent = ZONE_NAMES[k];
+  const name = camVault > 0.5 ? "Verlies unter dem Schloss" : ZONE_NAMES[k];
+  if (chapterEl.textContent !== name) chapterEl.textContent = name;
 }
+// Anteil des Verlieses an der Kamera (0 außerhalb, 1 innen)
+let camVault = 0;
+console.log("[Mystery Ride] Schleife", LOOP_LENGTH, "Zonengrenzen", ZONE_BOUNDS.join(" / "), "Verlies", -VAULT_START, "bis", -VAULT_END,
+  "Szenen", SCENES.map((s) => s.type + " " + s.z).join(", "));
 
 // --- Render Loop ---
 const FAR = 300.0;       // Sichtweite
@@ -143,6 +148,7 @@ function drawScene(pass) {
 
   gl.useProgram(progOpaque.prog);
   gl.uniform3fv(u.uZoneW, camZone);
+  gl.uniform1f(u.uVault, camVault);
   gl.uniformMatrix4fv(u.uViewProj, false, vp);
   gl.uniform1f(u.uTime, state.time);
   gl.uniform3fv(u.uCamPos, cam);
@@ -252,6 +258,7 @@ function drawScene(pass) {
   const fu = progFx.u;
   gl.useProgram(progFx.prog);
   gl.uniform3fv(fu.uZoneW, camZone);
+  gl.uniform1f(fu.uVault, camVault);
   gl.uniformMatrix4fv(fu.uViewProj, false, vp);
   gl.uniform1f(fu.uTime, state.time);
   gl.uniform3fv(fu.uCamPos, cam);
@@ -422,6 +429,7 @@ function render(now) {
   const zMod = ((state.travelDist % LOOP_LENGTH) + LOOP_LENGTH) % LOOP_LENGTH;
   const zCur = -zMod;
   zoneWeights(zCur, camZone);
+  camVault = vaultWeight(zCur);
   updateChapterLabel(camZone);
 
   // Boot folgt dem Fluss, pendelt leicht hin und her
@@ -565,7 +573,7 @@ function render(now) {
   gl.uniform1i(progComposite.u.uBloomTex, 1);
   gl.uniform1f(progComposite.u.uTime, state.time);
   gl.uniform2f(progComposite.u.uScreen, canvas.width, canvas.height);
-  gl.uniform1f(progComposite.u.uExposure, zoneMix(1.5, 1.6, 0.8));
+  gl.uniform1f(progComposite.u.uExposure, lerp(zoneMix(1.5, 1.6, 0.8), 1.8, camVault));
   // Lichtstrahlen: im Nebelwald vom gelben Mond, auf der Ebene schwächer von der Sonne
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_2D, rt.bloom[Math.min(1, rt.bloom.length - 1)].tex);
