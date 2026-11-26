@@ -53,9 +53,9 @@ function vaultBend(z) {
 function riverCenterX(z) {
   return riverBaseX(z) + VAULT_BEND * vaultBend(z);
 }
-// Wasserspiegel: im Verlies erst abwärts wie eine Rutsche (z -163 bis -185), dann ebener Grund für Ritual,
-// Wraith und Duell, am Ende bergauf wie ein Kettenlift zum Ausgang in den Pilzwald (z -226 bis -240)
-const VAULT_DROP = 4.0;
+// Wasserspiegel im Verlies. Ein Gefälle (Rutsche hinab, Kettenlift hinauf) war ausprobiert und ist abgeschaltet:
+// VAULT_DROP = 0 lässt das Wasser überall auf y = 0. Alle Verliesteile beziehen ihre Höhe weiter über riverWaterY.
+const VAULT_DROP = 0.0;
 function riverWaterY(z) {
   const d = -wrapZ(z);
   return -VAULT_DROP * smoothstep(163.0, 185.0, d) * (1.0 - smoothstep(226.0, 240.0, d));

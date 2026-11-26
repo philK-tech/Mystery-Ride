@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Alienworld</title>
+  <title>Mystery Ride</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -106,7 +106,7 @@
 <body>
   <canvas id="scene"></canvas>
   <div id="hud-top">
-    <div class="title">Alienworld</div>
+    <div class="title">Mystery Ride</div>
     <div class="chapter" id="chapter-label">Finsterer Nebelwald</div>
   </div>
   <div id="hud-pill">
@@ -190,9 +190,9 @@
     function riverCenterX(z) {
       return riverBaseX(z) + VAULT_BEND * vaultBend(z);
     }
-    // Wasserspiegel: im Verlies erst abwärts wie eine Rutsche (z -163 bis -185), dann ebener Grund für Ritual,
-    // Wraith und Duell, am Ende bergauf wie ein Kettenlift zum Ausgang in den Pilzwald (z -226 bis -240)
-    const VAULT_DROP = 4.0;
+    // Wasserspiegel im Verlies. Ein Gefälle (Rutsche hinab, Kettenlift hinauf) war ausprobiert und ist abgeschaltet:
+    // VAULT_DROP = 0 lässt das Wasser überall auf y = 0. Alle Verliesteile beziehen ihre Höhe weiter über riverWaterY.
+    const VAULT_DROP = 0.0;
     function riverWaterY(z) {
       const d = -wrapZ(z);
       return -VAULT_DROP * smoothstep(163.0, 185.0, d) * (1.0 - smoothstep(226.0, 240.0, d));
@@ -3532,8 +3532,6 @@
         float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
         vec2 suv = gl_FragCoord.xy / uScreen + N.xz * vec2(0.035, 0.05);
         vec3 refl = texture(uReflTex, clamp(suv, vec2(0.001), vec2(0.999))).rgb;
-        // im Verlies liegt das Wasser tiefer als die Spiegelebene y = 0: dort keine Spiegelung, nur Fackelglanz
-        refl *= 1.0 - vaultWeight(vWorldPos.z);
         vec3 deep = zw.x * vec3(0.004, 0.006, 0.009) + zw.y * vec3(0.002, 0.010, 0.016) + zw.z * vec3(0.02, 0.07, 0.09);
         vec3 col = mix(deep, refl, 0.35 + 0.6 * fres);
 
