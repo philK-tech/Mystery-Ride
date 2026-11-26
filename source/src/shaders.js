@@ -541,7 +541,7 @@ void main() {
     // Fackeln spiegeln sich als warme Lichtbahnen im Wasser
     for (int i = 0; i < 8; i++) {
       vec4 pp = uPL[i * 2];
-      if (pp.w <= 0.0) continue;
+      if (pp.w <= 0.0) break;   // Lichter liegen vorne, der Rest ist leer
       vec3 Lv = pp.xyz - vWorldPos;
       float dl = length(Lv);
       float att = clamp(1.0 - dl / (pp.w * 1.6), 0.0, 1.0);
@@ -1014,7 +1014,7 @@ void main() {
   // Punktlichter: Fackeln und Szenenlichter, weich auslaufend
   for (int i = 0; i < 8; i++) {
     vec4 pp = uPL[i * 2];
-    if (pp.w <= 0.0) continue;
+    if (pp.w <= 0.0) break;   // Lichter liegen vorne, der Rest ist leer
     vec3 Lv = pp.xyz - vWorldPos;
     float dl = length(Lv);
     float att = clamp(1.0 - dl / pp.w, 0.0, 1.0);

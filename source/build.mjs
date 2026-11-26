@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Die Reihenfolge ist wichtig: alles läuft in einer gemeinsamen Funktion, spätere Dateien nutzen frühere.
-const FILES = ['setup.js', 'math.js', 'geometry.js', 'meshes.js', 'sdfmesh.js', 'vault.js', 'shaders.js', 'world.js', 'renderer.js', 'boat.js', 'creatures.js', 'figures.js', 'audio.js', 'main.js'];
+const FILES = ['setup.js', 'math.js', 'geometry.js', 'meshes.js', 'sdfmesh.js', 'procfig.js', 'vault.js', 'shaders.js', 'world.js', 'renderer.js', 'boat.js', 'creatures.js', 'audio.js', 'main.js'];
 
 const read = (f) => readFileSync(path.join(here, f), 'utf8').replace(/\r\n/g, '\n');
 const indent = (s, n) => s.split('\n').map((l) => (l ? ' '.repeat(n) + l : l)).join('\n');
@@ -50,10 +50,7 @@ function packGlb(file) {
 }
 const ASSETS = {
   'boat-mesh': () => packGlb('assets/boat.glb'),
-  'boat-texture': () => readFileSync(path.join(here, 'assets/boat-texture.jpg')).toString('base64'),
-  // gebackene Figuren aus tools/vigil-bake (Format VFG1), gzip-komprimiert eingebettet
-  ...Object.fromEntries(['skeleton', 'cultist', 'wraith', 'boss', 'hellhound', 'hero'].map((n) =>
-    ['fig-' + n, () => gzipSync(readFileSync(path.join(here, 'assets/figures/' + n + '.vfg')), { level: 9 }).toString('base64')]))
+  'boat-texture': () => readFileSync(path.join(here, 'assets/boat-texture.jpg')).toString('base64')
 };
 
 const js = FILES.map((f) => body(read(path.join('src', f))))

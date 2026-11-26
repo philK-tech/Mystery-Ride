@@ -22,13 +22,12 @@ function toggleRun() {
   state.lastFrame = performance.now();
 }
 
-// Testhilfe: #figs stellt alle gebackenen Figuren nebeneinander vor die Startposition, #figs&clip=roar spielt einen Clip
+// Testhilfe: #figs stellt alle prozeduralen Figuren nebeneinander vor die Startposition, #figs&clip=roar spielt einen Clip
 if (/figs/.test(location.hash)) {
   const clip = (/clip=(\w+)/.exec(location.hash) || [0, "idle"])[1];
   ["hero", "skeleton", "cultist", "wraith", "hellhound", "boss"].forEach((n, i) => {
-    const f = spawnFigure(n, { x: riverCenterX(-12) + (i - 2.5) * 2.4, y: 0.0, z: -12 - (n === "boss" ? 2 : 0), yaw: 0 });
-    const tryPlay = () => (f.ready ? f.play(clip, 0) || f.play("idle", 0) : setTimeout(tryPlay, 100));
-    tryPlay();
+    const f = spawnProcFigure(n, { x: riverCenterX(-12) + (i - 2.5) * 2.4, y: 0.0, z: -12 - (n === "boss" ? 2 : 0), yaw: 0 });
+    f.play(clip, 0);
   });
 }
 
@@ -240,7 +239,6 @@ function drawScene(pass) {
   }
   gl.uniform4f(u.uAnim, 0, 0, 0, 0);
   // gebackene Figuren (figures.js) mit eigenem Skinning-Shader
-  drawFigures(pass, vp, cam);
   if (boat.mesh && boat.tex) {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, boat.tex);
@@ -444,7 +442,7 @@ function render(now) {
   ridePos[0] = bx; ridePos[1] = 1.2; ridePos[2] = zCur;
   updateCreatures(zCur, t, scene.idx, scene.t, camEye);
   gatherPointLights(camEye, t);
-  updateFigures(dt);
+  updateProcFigures(dt, camEye);
   updateAudio(camZone, sceneGrowl);
 
   // Blick: sanftes Umherschauen, dazu Hinwenden zu Tieren und Sehenswürdigkeiten

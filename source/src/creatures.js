@@ -232,7 +232,7 @@ function aheadDist(camZ, z) {
 // Für jedes Bild: Positionen der sichtbaren Tiere und Blickziele (POIs) für die Kamera
 const creatureDraws = [];   // { mesh, model, tint, anim }
 const pois = [];            // { x, y, z, w }
-const drawPool = Array.from({ length: 160 }, () => ({ mesh: null, model: Mat4.create(), tint: [1, 1, 1, 1], anim: [0, 0, 0, 0] }));
+const drawPool = Array.from({ length: 400 }, () => ({ mesh: null, model: Mat4.create(), tint: [1, 1, 1, 1], anim: [0, 0, 0, 0] }));
 const ripplePool = Array.from({ length: 16 }, () => ({ x: 0, z: 0, a: 0 }));
 const rippleDraws = [];
 
@@ -501,6 +501,7 @@ function updateCreatures(camZ, t, sceneIdx, sceneT, cam) {
     cue: (name, at, pan) => { if (vsc) cue(vsc, sceneT, name, at, pan); },
     light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y, z, color, radius, flicker: false }); }
   });
+  collectProcFigureDraws(take);   // Glieder der Verliesfiguren (procfig.js)
 }
 
 // Lichter, die Szenen für ein Bild setzen (höchstens 4), zusätzlich zu Fackeln und festen Lichtern
