@@ -489,4 +489,45 @@ function updateCreatures(camZ, t, sceneIdx, sceneT, cam) {
       if (lead && lead[2] < cam[2] - 28) focus(lead[0], lead[1], lead[2]);
     }
   });
+
+  // Verlies (vault.js): läuft jedes Bild, die Figuren steuern ihre Sichtbarkeit selbst
+  sceneLights.length = 0;
+  const vsc = sceneIdx >= 0 && SCENES[sceneIdx].type.startsWith("vault") ? SCENES[sceneIdx] : null;
+  updateVault({
+    camZ, cam, t, scene: vsc ? vsc.type : null, st: vsc ? sceneT : 0,
+    aheadDist: (z) => aheadDist(camZ, z),
+    focus,
+    duck: (v) => { sceneDuck = Math.max(sceneDuck, v); },
+    cue: (name, at, pan) => { if (vsc) cue(vsc, sceneT, name, at, pan); },
+    light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y, z, color, radius, flicker: false }); }
+  });
+}
+
+// Lichter, die Szenen für ein Bild setzen (höchstens 4), zusätzlich zu Fackeln und festen Lichtern
+const sceneLights = [];
+// Punktlichter für den Shader: die 8 nächsten aus Fackeln, festen Lichtern und Szenenlichtern
+const POINT_LIGHT_MAX = 8;
+const pointLightData = new Float32Array(POINT_LIGHT_MAX * 8);
+const _plCand = [];
+function gatherPointLights(cam, t) {
+  pointLightData.fill(0);
+  if (window.__noPL) return;
+  _plCand.length = 0;
+  const add = (l, k) => {
+    const d = Math.hypot(l.x - cam[0], l.y - cam[1], l.z - cam[2]) - l.radius;
+    if (d < 45.0) _plCand.push({ l, d, k });
+  };
+  VAULT_TORCHES.forEach((l, i) => add(l, i));
+  VAULT_LIGHTS.forEach((l, i) => add(l, 20 + i));
+  sceneLights.forEach((l, i) => add(l, 40 + i));
+  _plCand.sort((a, b) => a.d - b.d);
+  for (let i = 0; i < Math.min(POINT_LIGHT_MAX, _plCand.length); i++) {
+    const { l, k } = _plCand[i];
+    const fl = l.flicker ? 0.8 + 0.12 * Math.sin(t * 11.0 + k * 3.1) + 0.08 * Math.sin(t * 23.0 + k * 7.7) : 1.0;
+    const s = 2.6 * fl;
+    pointLightData.set([l.x, l.y, l.z, l.radius, l.color[0] * s, l.color[1] * s, l.color[2] * s, 0], i * 8);
+  }
+}
+function setPointLightUniforms(u) {
+  if (u.uPL) gl.uniform4fv(u.uPL, pointLightData);
 }

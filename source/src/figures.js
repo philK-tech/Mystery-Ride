@@ -146,7 +146,7 @@ function spawnFigure(name, o = {}) {
     clipNames: [], bones: new Float32Array(96 * 4),
     play(clip, fade = 0.2, speed = 1) {
       if (this.fig && !this.fig.clips[clip]) return false;
-      if (clip === this.clip && this.fade >= this.fadeDur) { this.speed = speed; return true; }
+      if (clip === this.clip && this.fade >= this.fadeDur && !this.clipDone()) { this.speed = speed; return true; }
       this.prev = this.clip; this.pt = this.t; this.clip = clip; this.t = 0;
       this.fade = 0; this.fadeDur = Math.max(0.0001, fade); this.speed = speed;
       return true;
@@ -198,6 +198,7 @@ function drawFigures(pass, vp, cam) {
   gl.useProgram(progSkin.prog);
   gl.uniform3fv(u.uZoneW, camZone);
   gl.uniform1f(u.uVault, camVault);
+  setPointLightUniforms(u);
   gl.uniformMatrix4fv(u.uViewProj, false, vp);
   gl.uniform1f(u.uTime, state.time);
   gl.uniform3fv(u.uCamPos, cam);

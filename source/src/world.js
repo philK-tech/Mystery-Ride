@@ -12,6 +12,9 @@ const SCENES = [
   { type: "herd", z: -442, side: -1, dur: 12.0, trigger: 30, slow: 0.45, zoom: 0.45 },
   { type: "mantas", z: -502, side: 1, dur: 12.0, trigger: 36, slow: 0.45, zoom: 0.15 }
 ];
+SCENES.push(...VAULT_SCENES);  // Szenen im Verlies (vault.js)
+// Fackeln im Verlies (Lage der Flammen), für die Punktlichter; wird in buildWorld gefüllt
+const VAULT_TORCHES = [];
 
 // Lichtung des Wolfs (halblinks) und sein Versteck im Wald dahinter
 function wolfSpot(sc) {
@@ -230,9 +233,12 @@ function buildWorld() {
     const hw = riverHalfWidth(z);
     const slope = -Math.atan(riverSlopeX(z));
     for (const side of [-1, 1]) {
+      if (vaultWallGap(z, side)) continue;   // Lücken für Nische und Podest (vault.js)
       pushInst("vaultWalls", [cx + side * (hw + wallCenterOffset), -0.5, z], side < 0 ? slope : slope + Math.PI, 0, 0, [wallThick, 12.0, wallLen], VAULT_STONE);
     }
-    pushInst("vaultCeiling", [cx, springY, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY - springY) * 2.0, wallLen], VAULT_STONE);
+    // über Nische und Podest setzt das Gewölbe höher an, sonst schneidet es dem Boss (4,3 m) den Oberkörper ab
+    const sy0 = vaultWallGap(z, -1) || vaultWallGap(z, 1) ? 8.2 : springY;
+    pushInst("vaultCeiling", [cx, sy0, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY + (sy0 - springY) * 0.3 - sy0) * 2.0, wallLen], VAULT_STONE);
   }
   // Säulen; an jeder zweiten hängt eine Fackel zum Fluss hin (abwechselnd links und rechts)
   [-174, -194, -214, -232].forEach((cz, idx) => {
@@ -244,7 +250,9 @@ function buildWorld() {
     const side = idx % 2 === 0 ? -1 : 1;
     const tx = cx + side * (hw - 0.36);
     pushInst("vaultTorches", [tx, 3.3, cz], side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, 0, [2.2, 2.2, 2.2], TORCH_WARM);
+    VAULT_TORCHES.push({ x: tx - side * 0.45, y: 3.75, z: cz, color: [1.0, 0.55, 0.2], radius: 9.0, flicker: true });
   });
+  placeVaultProps(pushInst);   // Laufsteg, Nische mit Altar, Podest (vault.js)
 
   // ---------------- Zone 2: Pilzwald ----------------
   // dichte Riesenpilze direkt am Ufer; manche neigen sich als Baldachin über den Fluss
@@ -495,6 +503,7 @@ function buildWorld() {
       inst("vaultRockWalls", buildVaultRockWallMesh(), 10.0),
       inst("vaultWalls", buildVaultWallMesh(), 3.0),
       inst("vaultCeiling", buildVaultCeilingMesh(), 3.0),
+      ...VAULT_PROP_GROUPS.map(([name, build, margin]) => inst(name, build(), margin)),
       inst("giantMushrooms", buildGiantMushroomMeshV2(), 14.0),
       inst("mushroomArches", buildMushroomArchMesh(), 14.0),
       inst("reeds", buildReedClusterMesh(), 2.0),

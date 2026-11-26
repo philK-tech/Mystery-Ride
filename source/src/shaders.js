@@ -474,6 +474,8 @@ uniform float uClip;
 uniform sampler2D uReflTex;
 uniform sampler2D uBoatTex;
 uniform vec4 uBoat;      // x, z, Kurswinkel, 1 = Boot vorhanden
+// Punktlichter (Fackeln im Verlies, Szenenlichter): je 2 Einträge: xyz + Reichweite, Farbe * Stärke
+uniform vec4 uPL[16];
 uniform vec2 uBoatScale; // Skalierung des Bootsmodells in x und z
 uniform vec2 uScreen;
 ` + GLSL_COMMON + `
@@ -536,6 +538,16 @@ void main() {
     col += vec3(0.4, 0.6, 0.9) * pow(max(dot(N, normalize(MOON_DIR + V)), 0.0), 220.0) * 1.5 * zw.y;
     col += vec3(0.6, 0.7, 0.85) * pow(max(dot(N, normalize(SUN_A + V)), 0.0), 220.0) * 2.0 * zw.x * (1.0 - vaultWeight(vWorldPos.z)); // im Verlies kein Mond
     col += vec3(1.0, 0.95, 0.85) * pow(max(dot(N, normalize(SUN_C + V)), 0.0), 300.0) * 8.0 * zw.z;
+    // Fackeln spiegeln sich als warme Lichtbahnen im Wasser
+    for (int i = 0; i < 8; i++) {
+      vec4 pp = uPL[i * 2];
+      if (pp.w <= 0.0) continue;
+      vec3 Lv = pp.xyz - vWorldPos;
+      float dl = length(Lv);
+      float att = clamp(1.0 - dl / (pp.w * 1.6), 0.0, 1.0);
+      Lv /= dl;
+      col += uPL[i * 2 + 1].rgb * (att * att * 0.06 + pow(max(dot(N, normalize(Lv + V)), 0.0), 90.0) * att * 1.2);
+    }
     col = applyFog(col, vWorldPos, uCamPos, t);
     fragColor = vec4(clamp(col, vec3(0.0), vec3(30.0)), 1.0);
     return;
@@ -998,6 +1010,20 @@ void main() {
     float spec = pow(max(dot(N, normalize(SUN_C + V)), 0.0), specPow) * (0.02 + wet * 0.35);
     vec3 c = albC * (amb + vec3(1.35, 1.25, 1.05) * 2.0 * ndl * mix(1.0, ao, 0.5)) + vec3(1.2, 1.1, 1.0) * spec * ao;
     col += c * zw.z;
+  }
+  // Punktlichter: Fackeln und Szenenlichter, weich auslaufend
+  for (int i = 0; i < 8; i++) {
+    vec4 pp = uPL[i * 2];
+    if (pp.w <= 0.0) continue;
+    vec3 Lv = pp.xyz - vWorldPos;
+    float dl = length(Lv);
+    float att = clamp(1.0 - dl / pp.w, 0.0, 1.0);
+    att *= att;
+    if (att <= 0.0) continue;
+    Lv /= dl;
+    float ndl = max((dot(N, Lv) + wrap) / (1.0 + wrap), 0.0) * 0.85 + 0.06;
+    float spec = pow(max(dot(N, normalize(Lv + V)), 0.0), specPow) * (0.05 + wet * 0.6);
+    col += uPL[i * 2 + 1].rgb * att * (albA * ndl * ao + spec);
   }
   col += emissive * emScale * wave * react * (0.85 + 0.15 * sin(t * 1.7 + vSeed * 30.0));
   col = applyFog(col, vWorldPos, uCamPos, t);

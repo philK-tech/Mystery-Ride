@@ -149,6 +149,7 @@ function drawScene(pass) {
   gl.useProgram(progOpaque.prog);
   gl.uniform3fv(u.uZoneW, camZone);
   gl.uniform1f(u.uVault, camVault);
+  setPointLightUniforms(u);
   gl.uniformMatrix4fv(u.uViewProj, false, vp);
   gl.uniform1f(u.uTime, state.time);
   gl.uniform3fv(u.uCamPos, cam);
@@ -418,7 +419,8 @@ function updateScene(dt) {
 }
 
 function render(now) {
-  const dt = Math.min((now - state.lastFrame) * 0.001, 0.05);
+  // nie negativ: der Zeitstempel von requestAnimationFrame kann vor dem zuletzt gemerkten performance.now() liegen
+  const dt = Math.max(0, Math.min((now - state.lastFrame) * 0.001, 0.05));
   state.lastFrame = now;
   if (state.running) {
     state.time += dt;
@@ -441,6 +443,7 @@ function render(now) {
   // kurzes Ducken der Kamera (Fledermausschwarm), wirkt nach dem Aufruf der Tiere im nächsten Bild
   ridePos[0] = bx; ridePos[1] = 1.2; ridePos[2] = zCur;
   updateCreatures(zCur, t, scene.idx, scene.t, camEye);
+  gatherPointLights(camEye, t);
   updateFigures(dt);
   updateAudio(camZone, sceneGrowl);
 
@@ -616,3 +619,5 @@ function render(now) {
 }
 
 requestAnimationFrame(render);
+// Testhilfe für automatische Prüfungen: Zustand der Fahrt abfragen
+window.__dbg = () => ({ td: state.travelDist, time: state.time, hash: location.hash, run: state.running, cam: Array.from(camEye), idx: scene.idx, st: scene.t, sp: scene.speed, duck: sceneDuck, stand: sceneStand, rock: sceneRock, foc: sceneFocusOn ? Array.from(sceneFocus) : null, vault: camVault, gaze: [gaze.yaw, gaze.pitch] });
