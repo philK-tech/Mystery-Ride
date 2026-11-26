@@ -1263,3 +1263,90 @@ function buildVaultTorchMesh() {
   addBox(b, [0, 0.15, 0.13], [0.055, 0.14, 0.055], 0.1, 0.15, 38, 0.0);
   return b;
 }
+
+// Felsmassiv um Ein- und Ausgangstor: links und rechts Felsflanken, oben ein Sturz über dem Tor (Material 2)
+// Einheitsmaß: Breite 1 (-0.5..+0.5), Höhe -0.1..1.0, Tiefe 1. Toröffnung x in [-0.145, +0.145], bis y = lintelY0
+function buildVaultRockWallMesh() {
+  const b = createGeometryBuilder();
+  const wingW = 0.355;
+  const wingCenter = 0.5 - wingW * 0.5;
+  const lintelY0 = 0.56;   // Unterkante des Sturzes knapp über dem Scheitel des Torbogens
+  const lintelH = 0.44;
+  addBox(b, [-wingCenter, 0.45, 0.0], [wingW, 1.1, 1.0], 0, 0, 2, 0.0);
+  addBox(b, [wingCenter, 0.45, 0.0], [wingW, 1.1, 1.0], 0, 0, 2, 0.0);
+  addBox(b, [-wingCenter * 1.08, 0.42, 0.18], [wingW * 0.85, 1.05, 0.72], 0.06, 0, 2, 0.0);
+  addBox(b, [wingCenter * 1.08, 0.42, 0.18], [wingW * 0.85, 1.05, 0.72], -0.06, 0, 2, 0.0);
+  addBox(b, [0.0, lintelY0 + lintelH * 0.5, 0.0], [1.0, lintelH, 1.02], 0, 0, 2, 0.0);
+  addBox(b, [0.0, lintelY0 + lintelH * 0.52, 0.14], [0.92, lintelH * 0.9, 0.78], 0, 0, 2, 0.0);
+  b.computeFacetedNormals();
+  return b;
+}
+
+// Seitliche Verlieswand (Material 36): grob behauenes Mauerwerk mit Pfeilervorlage, unten feucht
+// Lokal: x = -0.5 ist die Innenseite zum Fluss, y 0..1, z -0.5..+0.5
+function buildVaultWallMesh() {
+  const b = createGeometryBuilder();
+  const segY = 12, segZ = 8;
+  for (let iy = 0; iy <= segY; iy++) {
+    const v = iy / segY;
+    for (let iz = 0; iz <= segZ; iz++) {
+      const u = iz / segZ;
+      const blockX = Math.floor(v * 14.0);
+      const blockZ = Math.floor((u + (blockX % 2) * 0.25) * 6.0);
+      const relief = (fbm2(blockZ * 1.7 + v * 3.1, blockX * 2.3 + u * 2.0, 3) - 0.5) * 0.12;
+      const ao = clamp01(0.45 + 0.55 * v);
+      const wet = clamp01(1.0 - smoothstep(0.05, 0.34, v)) * 0.65;
+      b.pushVertex(-0.5 + relief, v, u - 0.5, -1, 0, 0, u * 2.0, v * 6.0, ao, wet, 0.0, 36);
+    }
+  }
+  const row = segZ + 1;
+  for (let iy = 0; iy < segY; iy++) {
+    for (let iz = 0; iz < segZ; iz++) {
+      const a = iy * row + iz;
+      b.pushQuad(a, a + row, a + row + 1, a + 1);
+    }
+  }
+  b.computeSmoothNormals();
+  addBox(b, [0.12, 0.5, 0.0], [0.76, 1.0, 1.0], 0, 0, 36, 0.0);
+  addBox(b, [-0.46, 0.5, 0.0], [0.22, 1.0, 0.28], 0, 0, 36, 0.15);
+  addBox(b, [-0.44, 0.08, 0.0], [0.26, 0.16, 1.0], 0, 0, 36, 0.6);
+  return b;
+}
+
+// Tonnengewölbe als Decke (Material 36): halber Zylindermantel, Innenseite sichtbar
+// Lokal: x -0.5..+0.5, y 0..0.5, z -0.5..+0.5
+function buildVaultCeilingMesh() {
+  const b = createGeometryBuilder();
+  const segA = 20, segZ = 6, rInner = 0.5, rOuter = 0.58;
+  for (let iz = 0; iz <= segZ; iz++) {
+    const vz = iz / segZ;
+    for (let ia = 0; ia <= segA; ia++) {
+      const ua = ia / segA, ang = ua * Math.PI, ca = Math.cos(ang), sa = Math.sin(ang);
+      const r = rInner + (fbm2(ua * 8.0, vz * 6.0, 3) - 0.5) * 0.025;
+      b.pushVertex(ca * r, sa * r, vz - 0.5, -ca, -sa, 0.0, ua * 5.0, vz * 2.0, clamp01(0.55 + 0.45 * sa), 0.0, 0.0, 36);
+    }
+  }
+  const row = segA + 1;
+  for (let iz = 0; iz < segZ; iz++) {
+    for (let ia = 0; ia < segA; ia++) {
+      const a = iz * row + ia;
+      b.pushQuad(a, a + 1, a + row + 1, a + row);
+    }
+  }
+  b.computeSmoothNormals();
+  const outerBase = b.positions.length / 3;
+  for (let iz = 0; iz <= segZ; iz++) {
+    const vz = iz / segZ;
+    for (let ia = 0; ia <= segA; ia++) {
+      const ang = (ia / segA) * Math.PI, ca = Math.cos(ang), sa = Math.sin(ang);
+      b.pushVertex(ca * rOuter, sa * rOuter, vz - 0.5, ca, sa, 0.0, (ia / segA) * 5.0, vz * 2.0, 0.4, 0.0, 0.0, 36);
+    }
+  }
+  for (let iz = 0; iz < segZ; iz++) {
+    for (let ia = 0; ia < segA; ia++) {
+      const a = outerBase + iz * row + ia;
+      b.pushQuad(a, a + row, a + row + 1, a + 1);
+    }
+  }
+  return b;
+}

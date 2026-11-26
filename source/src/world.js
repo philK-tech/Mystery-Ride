@@ -193,12 +193,15 @@ function buildWorld() {
   // ---------------- Zone A2: Verlies unter dem Schloss (z -160 bis -240) ----------------
   const VAULT_STONE = [0.14, 0.15, 0.19, 1];
   const TORCH_WARM = [1.0, 0.62, 0.22, 1];
+  const ROCK_PORTAL_TINT = [0.55, 0.58, 0.65, 1];
   // Felstor am Eingang (z = -160) und Portalbogen am Ausgang in den Pilzwald (z = -240)
   for (const [gz, yaw] of [[-160, 0], [-240, Math.PI]]) {
     const cx = riverCenterX(gz);
     const hw = riverHalfWidth(gz) + 2.6;
     const slope = -Math.atan(riverSlopeX(gz));
     pushInst("vaultGate", [cx, 0.0, gz], slope + yaw, 0, 0, [hw * 2.0, 13.5, 9.5], VAULT_STONE);
+    // breite Felswand um das Tor (74 m breit, 18 m hoch), damit man nicht am Tor vorbei ins Verlies sieht
+    pushInst("vaultRockWalls", [cx, -1.0, gz], slope + yaw, 0, 0, [74.0, 19.0, 7.5], ROCK_PORTAL_TINT);
   }
   // Gewölberippen über den Fluss
   [-172, -192, -212, -230].forEach((az) => {
@@ -217,6 +220,19 @@ function buildWorld() {
       const qx = cx + side * (hw + 0.55);
       pushInst("vaultQuays", [qx, 0.35, z], slope, 0, 0, [1.3, 1.4, quayStep + 0.4], VAULT_STONE);
     }
+  }
+  // Seitenwände (4-m-Abschnitte mit 10 % Überlappung, 12 m hoch) und Tonnengewölbe (Scheitel 10,5 m)
+  const wallStep = 4.0, wallLen = wallStep * 1.1, wallThick = 1.9;
+  const wallCenterOffset = 1.6 + wallThick * 0.5;   // Innenseite bei riverHalfWidth + 1,6
+  const springY = 5.4, vaultApexY = 10.5;
+  for (let z = -158.0; z >= -242.0; z -= wallStep) {
+    const cx = riverCenterX(z);
+    const hw = riverHalfWidth(z);
+    const slope = -Math.atan(riverSlopeX(z));
+    for (const side of [-1, 1]) {
+      pushInst("vaultWalls", [cx + side * (hw + wallCenterOffset), -0.5, z], side < 0 ? slope : slope + Math.PI, 0, 0, [wallThick, 12.0, wallLen], VAULT_STONE);
+    }
+    pushInst("vaultCeiling", [cx, springY, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY - springY) * 2.0, wallLen], VAULT_STONE);
   }
   // Säulen; an jeder zweiten hängt eine Fackel zum Fluss hin (abwechselnd links und rechts)
   [-174, -194, -214, -232].forEach((cz, idx) => {
@@ -476,6 +492,9 @@ function buildWorld() {
       inst("vaultQuays", buildVaultQuayWallMesh(), 10.0),
       inst("vaultColumns", buildVaultColumnMesh(), 12.0),
       inst("vaultTorches", buildVaultTorchMesh(), 4.0),
+      inst("vaultRockWalls", buildVaultRockWallMesh(), 10.0),
+      inst("vaultWalls", buildVaultWallMesh(), 3.0),
+      inst("vaultCeiling", buildVaultCeilingMesh(), 3.0),
       inst("giantMushrooms", buildGiantMushroomMeshV2(), 14.0),
       inst("mushroomArches", buildMushroomArchMesh(), 14.0),
       inst("reeds", buildReedClusterMesh(), 2.0),
