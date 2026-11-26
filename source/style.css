@@ -1,0 +1,96 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #02050c;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #dff8ff;
+  user-select: none;
+}
+canvas#scene {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+#hud-top {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0.88;
+  transition: opacity 0.6s ease;
+}
+#hud-top .title {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #6ceeff;
+  text-shadow: 0 0 12px rgba(56, 224, 255, 0.45);
+}
+#hud-top .chapter {
+  font-size: 12px;
+  color: rgba(215, 244, 255, 0.78);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+#hud-pill {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(6, 13, 26, 0.62);
+  border: 1px solid rgba(110, 232, 255, 0.22);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+}
+button.pill-btn {
+  appearance: none;
+  border: none;
+  background: rgba(25, 195, 235, 0.16);
+  color: #dcf8ff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.12s ease;
+}
+button.pill-btn:hover {
+  background: rgba(45, 215, 255, 0.3);
+}
+button.pill-btn:active {
+  transform: scale(0.96);
+}
+button.pill-btn.muted {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.06);
+}
+#err-banner {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  max-width: 520px;
+  padding: 18px 22px;
+  border-radius: 10px;
+  background: rgba(18, 8, 16, 0.92);
+  border: 1px solid rgba(255, 110, 150, 0.5);
+  color: #ffd6e2;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

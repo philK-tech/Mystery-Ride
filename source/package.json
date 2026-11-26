@@ -1,0 +1,9 @@
+{
+  "name": "alienworld",
+  "private": true,
+  "description": "Alienworld: prozedurale WebGL2-Fahrt, gebündelt in eine HTML-Datei",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

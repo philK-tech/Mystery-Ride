@@ -1,0 +1,200 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Vigil Bake</title>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
+</head><body><script type="module">
+/*
+ * Backt Figuren aus dem Vigil-Kit in das Alienworld-Figurenformat "VFG1" (ohne three.js abspielbar).
+ *
+ * Aufbau der Datei (little endian):
+ *   "VFG1" | u32 Länge des JSON-Kopfes | JSON-Kopf (UTF-8) | Auffüllen auf 4 Byte | Datenblöcke
+ * JSON-Kopf:
+ *   { name, n (Vertices), ni (Indizes), bones, bmin[3], bmax[3], height,
+ *     sections: { pos, nrm, col, skin, idx }   jeweils [Byte-Offset, Byte-Länge] relativ zum Datenbeginn
+ *     clips: [{ name, fps, frames, loop, off }] off = Byte-Offset der Matrizen }
+ * Datenblöcke:
+ *   pos  Uint16 x3   Position, quantisiert zwischen bmin und bmax (Rig-Raum, Meter, ohne Skalierung)
+ *   nrm  Int8   x4   Normale * 127 (4. Byte frei)
+ *   col  Uint8  x4   Grundfarbe sRGB (Textur * Materialfarbe * Vertexfarbe), Alpha = Leuchtmaske 0..255
+ *   skin Uint8  x8   4 Knochenindizes, dann 4 Gewichte (0..255, Summe 255)
+ *   idx  Uint16 oder Uint32 (Uint32, wenn n > 65535)
+ *   Clips: pro Bild pro Knochen eine 3x4-Matrix (Zeilen der Skin-Matrix, 12 Half-Floats).
+ *          Skin-Matrix = Knochen-Weltmatrix (Figur im Ursprung, Blick +z, Größe eingerechnet) * inverse Bindmatrix.
+ *          Vertex im Figurenraum = Summe_k w_k * (M_k * vec4(pos,1)).
+ */
+import * as THREE from 'three';
+import { VigilStandaloneFactory } from './VigilAssets.js';
+const renderer = new THREE.WebGLRenderer();
+const scene = new THREE.Scene();
+const vigil = new VigilStandaloneFactory(renderer, scene, { tier: 'low' });
+
+const half = THREE.DataUtils.toHalfFloat;
+const _pixCache = new Map();
+function pixels(tex) {
+  if (!tex || !tex.image) return null;
+  if (_pixCache.has(tex)) return _pixCache.get(tex);
+  const img = tex.image;
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  if (img.data && !(img instanceof HTMLCanvasElement)) {
+    const id = new ImageData(new Uint8ClampedArray(img.data.buffer.slice(0)), img.width, img.height);
+    g.putImageData(id, 0, 0);
+  } else g.drawImage(img, 0, 0);
+  const d = { w: c.width, h: c.height, p: g.getImageData(0, 0, c.width, c.height).data };
+  _pixCache.set(tex, d);
+  return d;
+}
+const s2l = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+const l2s = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+function sample(tex, u, v, out) {
+  const d = pixels(tex);
+  if (!d) { out[0] = out[1] = out[2] = 1; return out; }
+  tex.updateMatrix();
+  const uv = new THREE.Vector2(u, v).applyMatrix3(tex.matrix);
+  let x = uv.x - Math.floor(uv.x), y = uv.y - Math.floor(uv.y);
+  if (tex.flipY) y = 1 - y;
+  const px = Math.min(d.w - 1, Math.floor(x * d.w)), py = Math.min(d.h - 1, Math.floor(y * d.h));
+  // kleiner 3x3-Mittelwert gegen Rauschen
+  let r = 0, g = 0, b = 0, k = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const xx = (px + dx + d.w) % d.w, yy = (py + dy + d.h) % d.h, i = (yy * d.w + xx) * 4;
+    r += d.p[i]; g += d.p[i + 1]; b += d.p[i + 2]; k++;
+  }
+  out[0] = s2l(r / k / 255); out[1] = s2l(g / k / 255); out[2] = s2l(b / k / 255);
+  return out;
+}
+
+function collectMeshes(root) { const m = []; root.traverse((o) => { if (o.isSkinnedMesh) m.push(o); }); return m; }
+
+function bakeGeometry(meshes, glowFn) {
+  const P = [], N = [], C = [], SI = [], SW = [], I = [];
+  let base = 0;
+  const tmp = [0, 0, 0];
+  for (const mesh of meshes) {
+    const g = mesh.geometry, pos = g.attributes.position, nrm = g.attributes.normal, uv = g.attributes.uv;
+    const col = g.attributes.color, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const n = pos.count;
+    const vMat = new Int16Array(n).fill(-1);
+    const idx = g.index ? g.index.array : null;
+    const groups = g.groups.length ? g.groups : [{ start: 0, count: idx ? idx.length : n, materialIndex: 0 }];
+    for (const gr of groups) for (let k = gr.start; k < gr.start + gr.count; k++) { const v = idx ? idx[k] : k; if (vMat[v] < 0) vMat[v] = gr.materialIndex; }
+    for (let v = 0; v < n; v++) {
+      P.push(pos.getX(v), pos.getY(v), pos.getZ(v));
+      N.push(nrm.getX(v), nrm.getY(v), nrm.getZ(v));
+      const mat = mats[Math.max(0, vMat[v])] || mats[0];
+      sample(mat.map, uv ? uv.getX(v) : 0, uv ? uv.getY(v) : 0, tmp);
+      let r = tmp[0] * mat.color.r, gg = tmp[1] * mat.color.g, b = tmp[2] * mat.color.b;
+      if (col) { r *= col.getX(v); gg *= col.getY(v); b *= col.getZ(v); }
+      const glow = glowFn ? glowFn(mesh, mat, v) : 0;
+      C.push(Math.round(l2s(Math.min(1, r)) * 255), Math.round(l2s(Math.min(1, gg)) * 255), Math.round(l2s(Math.min(1, b)) * 255), Math.round(glow * 255));
+      const w = [sw.getX(v), sw.getY(v), sw.getZ(v), sw.getW(v)], s = w[0] + w[1] + w[2] + w[3] || 1;
+      const q = w.map((x) => Math.round((x / s) * 255));
+      q[0] += 255 - (q[0] + q[1] + q[2] + q[3]);
+      SI.push(si.getX(v), si.getY(v), si.getZ(v), si.getW(v));
+      SW.push(...q);
+    }
+    if (idx) for (let k = 0; k < idx.length; k++) I.push(idx[k] + base); else for (let k = 0; k < n; k++) I.push(k + base);
+    base += n;
+  }
+  return { P, N, C, SI, SW, I, n: base };
+}
+
+function bakeClips(skeleton, root, plays, fps) {
+  const out = [];
+  const bones = skeleton.bones, inv = skeleton.boneInverses, m = new THREE.Matrix4();
+  for (const c of plays) {
+    c.start();
+    const frames = Math.max(2, Math.round(c.dur * fps) + (c.loop ? 0 : 1));
+    const data = new Uint16Array(frames * bones.length * 12);
+    for (let f = 0; f < frames; f++) {
+      c.step(f === 0 ? 1e-4 : 1 / fps);
+      root.updateMatrixWorld(true);
+      for (let b = 0; b < bones.length; b++) {
+        m.multiplyMatrices(bones[b].matrixWorld, inv[b]);
+        const e = m.elements, o = (f * bones.length + b) * 12;
+        // Zeilen der Matrix (column-major elements -> row r: e[r], e[r+4], e[r+8], e[r+12])
+        for (let r = 0; r < 3; r++) for (let col = 0; col < 4; col++) data[o + r * 4 + col] = half(e[r + col * 4]);
+      }
+    }
+    out.push({ name: c.name, fps, frames, loop: !!c.loop, data });
+  }
+  return out;
+}
+
+function pack(name, geo, clips, height) {
+  const bmin = [Infinity, Infinity, Infinity], bmax = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < geo.P.length; i += 3) for (let k = 0; k < 3; k++) { bmin[k] = Math.min(bmin[k], geo.P[i + k]); bmax[k] = Math.max(bmax[k], geo.P[i + k]); }
+  const n = geo.n, big = n > 65535;
+  const pos = new Uint16Array(n * 3);
+  for (let i = 0; i < n * 3; i++) { const k = i % 3; pos[i] = Math.round(((geo.P[i] - bmin[k]) / (bmax[k] - bmin[k] || 1)) * 65535); }
+  const nrm = new Int8Array(n * 4);
+  for (let v = 0; v < n; v++) for (let k = 0; k < 3; k++) nrm[v * 4 + k] = Math.round(Math.max(-1, Math.min(1, geo.N[v * 3 + k])) * 127);
+  const col = new Uint8Array(geo.C);
+  const skin = new Uint8Array(n * 8);
+  for (let v = 0; v < n; v++) { for (let k = 0; k < 4; k++) { skin[v * 8 + k] = geo.SI[v * 4 + k]; skin[v * 8 + 4 + k] = geo.SW[v * 4 + k]; } }
+  const idx = big ? new Uint32Array(geo.I) : new Uint16Array(geo.I);
+  const blocks = [pos, nrm, col, skin, idx, ...clips.map((c) => c.data)];
+  const offs = []; let off = 0;
+  for (const b of blocks) { offs.push(off); off += Math.ceil(b.byteLength / 4) * 4; }
+  const head = {
+    name, n, ni: idx.length, bones: clips.length ? clips[0].data.length / clips[0].frames / 12 : 0, bmin, bmax, height,
+    idx32: big,
+    sections: { pos: [offs[0], pos.byteLength], nrm: [offs[1], nrm.byteLength], col: [offs[2], col.byteLength], skin: [offs[3], skin.byteLength], idx: [offs[4], idx.byteLength] },
+    clips: clips.map((c, i) => ({ name: c.name, fps: c.fps, frames: c.frames, loop: c.loop, off: offs[5 + i] })),
+  };
+  const json = new TextEncoder().encode(JSON.stringify(head));
+  const headLen = 8 + Math.ceil(json.length / 4) * 4;
+  const buf = new Uint8Array(headLen + off);
+  buf.set([86, 70, 71, 49], 0);
+  new DataView(buf.buffer).setUint32(4, json.length, true);
+  buf.set(json, 8);
+  blocks.forEach((b, i) => buf.set(new Uint8Array(b.buffer, b.byteOffset, b.byteLength), headLen + offs[i]));
+  return { buf, head };
+}
+
+function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+
+window.__bake = (name, clipNames, fps = 15, scale = 1) => {
+  if (name === 'hero') {
+    const h = vigil.createHero();
+    h.root.position.set(0, 0, 0);
+    h.update(1 / 60, 0);
+    const meshes = h.meshes.filter((m) => m.isSkinnedMesh);
+    const skel = meshes[0].skeleton;
+    const geo = bakeGeometry(meshes, null);
+    let elapsed = 0;
+    const plays = clipNames.map((cn) => {
+      const isAct = !!h.clips.actions[cn];
+      const clip = isAct ? h.clips.actions[cn] : h.clips.base[cn === 'idle' ? 'locomotion' : cn];
+      return {
+        name: cn, dur: clip?.dur ?? 1, loop: cn === 'idle' || clip?.loop === true,
+        start() { h.graph.clearAction(0); h.graph.playBase(cn === 'idle' || isAct ? 'locomotion' : cn, { fade: 0, restart: true }); if (isAct) h.graph.playAction(cn, { fade: 0, restart: true }); h.setGait(0); },
+        step(dt) { elapsed += dt; h.graph.update(dt, { moveW: 0, gait: 0, turn: 0, armDamp: 0, elapsed, dt, seed: 0.37 }); },
+      };
+    });
+    const clips = bakeClips(skel, h.root, plays, fps);
+    const box = h.box(); const height = box.max.y - box.min.y;
+    const { buf, head } = pack(name, geo, clips, height);
+    return { b64: b64(buf), head, bytes: buf.length };
+  }
+  const a = vigil.createCreature(name, { scale });
+  a.root.position.set(0, 0, 0);
+  const mesh = collectMeshes(a.root)[0];
+  // Leuchtmaske: Materialien mit Leuchtfarbe (uMonEmissColor) markieren
+  const glowFn = (m, mat) => { const u = mat.userData.monU; if (!u || !u.uMonEmissColor) return 0; const c = u.uMonEmissColor.value; return Math.min(1, (c.r + c.g + c.b) / 3); };
+  const geo = bakeGeometry([mesh], glowFn);
+  const built = vigil._built.get(a.def.id) || [...vigil._built.values()].find((b) => b.rig === undefined) ;
+  const clipDefs = vigil._built.get(a.def.id)?.clips || {};
+  let elapsed = 0;
+  const plays = clipNames.filter((cn) => a.clipNames.includes(cn)).map((cn) => ({
+    name: cn, dur: clipDefs[cn]?.dur ?? 1, loop: clipDefs[cn]?.loop !== false,
+    start() { a.anim.play(cn, { fade: 0, restart: true }); },
+    step(dt) { elapsed += dt; a.update(dt, elapsed); },
+  }));
+  const clips = bakeClips(mesh.skeleton, a.root, plays, fps);
+  const box = a.box(); const height = box.max.y - box.min.y;
+  const { buf, head } = pack(name, geo, clips, height);
+  return { b64: b64(buf), head, bytes: buf.length };
+};
+window.__ready = true;
+</script></body></html>
