@@ -197,21 +197,24 @@ function buildWorld() {
   const VAULT_STONE = [0.14, 0.15, 0.19, 1];
   const TORCH_WARM = [1.0, 0.62, 0.22, 1];
   const ROCK_PORTAL_TINT = [0.55, 0.58, 0.65, 1];
+  // Alles im Verlies steht relativ zum Wasserspiegel (riverWaterY) und neigt sich mit dem Gefälle (tilt = false: senkrecht)
+  const vPush = (name, pos, rotY, rotX, rotZ, scale, tint, tilt = true) => pushInst(name,
+    [pos[0], pos[1] + riverWaterY(pos[2]), pos[2]], rotY, rotX + (tilt ? -Math.atan(riverWaterSlope(pos[2])) * Math.cos(rotY) : 0), rotZ, scale, tint);
   // Felstor am Eingang (z = -160) und Portalbogen am Ausgang in den Pilzwald (z = -240)
   for (const [gz, yaw] of [[-160, 0], [-240, Math.PI]]) {
     const cx = riverCenterX(gz);
     const hw = riverHalfWidth(gz) + 2.6;
     const slope = -Math.atan(riverSlopeX(gz));
-    pushInst("vaultGate", [cx, 0.0, gz], slope + yaw, 0, 0, [hw * 2.0, 13.5, 9.5], VAULT_STONE);
+    vPush("vaultGate", [cx, 0.0, gz], slope + yaw, 0, 0, [hw * 2.0, 13.5, 9.5], VAULT_STONE);
     // breite Felswand um das Tor (74 m breit, 18 m hoch), damit man nicht am Tor vorbei ins Verlies sieht
-    pushInst("vaultRockWalls", [cx, -1.0, gz], slope + yaw, 0, 0, [74.0, 19.0, 7.5], ROCK_PORTAL_TINT);
+    vPush("vaultRockWalls", [cx, -1.0, gz], slope + yaw, 0, 0, [74.0, 19.0, 7.5], ROCK_PORTAL_TINT);
   }
   // Gewölberippen über den Fluss
   [-172, -192, -212, -230].forEach((az) => {
     const cx = riverCenterX(az);
     const hw = riverHalfWidth(az) + 2.2;
     const slope = -Math.atan(riverSlopeX(az));
-    pushInst("vaultArches", [cx, 0.0, az], slope, 0, 0, [hw * 2.0, 11.5, 4.2], VAULT_STONE);
+    vPush("vaultArches", [cx, 0.0, az], slope, 0, 0, [hw * 2.0, 11.5, 4.2], VAULT_STONE);
   });
   // Kaimauern beidseitig des Flusses
   const quayStep = 8.0;
@@ -221,7 +224,7 @@ function buildWorld() {
     const slope = -Math.atan(riverSlopeX(z));
     for (const side of [-1, 1]) {
       const qx = cx + side * (hw + 0.55);
-      pushInst("vaultQuays", [qx, 0.35, z], slope, 0, 0, [1.3, 1.4, quayStep + 0.4], VAULT_STONE);
+      vPush("vaultQuays", [qx, 0.35, z], slope, 0, 0, [1.3, 1.4, quayStep + 0.4], VAULT_STONE);
     }
   }
   // Seitenwände (4-m-Abschnitte mit 10 % Überlappung, 12 m hoch) und Tonnengewölbe (Scheitel 10,5 m)
@@ -234,25 +237,25 @@ function buildWorld() {
     const slope = -Math.atan(riverSlopeX(z));
     for (const side of [-1, 1]) {
       if (vaultWallGap(z, side)) continue;   // Lücken für Nische und Podest (vault.js)
-      pushInst("vaultWalls", [cx + side * (hw + wallCenterOffset), -0.5, z], side < 0 ? slope : slope + Math.PI, 0, 0, [wallThick, 12.0, wallLen], VAULT_STONE);
+      vPush("vaultWalls", [cx + side * (hw + wallCenterOffset), -0.5, z], side < 0 ? slope : slope + Math.PI, 0, 0, [wallThick, 12.0, wallLen], VAULT_STONE);
     }
     // über Nische und Podest setzt das Gewölbe höher an, sonst schneidet es dem Boss (4,3 m) den Oberkörper ab
     const sy0 = vaultWallGap(z, -1) || vaultWallGap(z, 1) ? 8.2 : springY;
-    pushInst("vaultCeiling", [cx, sy0, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY + (sy0 - springY) * 0.3 - sy0) * 2.0, wallLen], VAULT_STONE);
+    vPush("vaultCeiling", [cx, sy0, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY + (sy0 - springY) * 0.3 - sy0) * 2.0, wallLen], VAULT_STONE);
   }
   // Säulen; an jeder zweiten hängt eine Fackel zum Fluss hin (abwechselnd links und rechts)
   [-174, -194, -214, -232].forEach((cz, idx) => {
     const cx = riverCenterX(cz);
     const hw = riverHalfWidth(cz) + 1.25;
     for (const side of [-1, 1]) {
-      pushInst("vaultColumns", [cx + side * hw, 4.6, cz], 0, 0, 0, [2.4, 9.6, 2.4], VAULT_STONE);
+      vPush("vaultColumns", [cx + side * hw, 4.6, cz], 0, 0, 0, [2.4, 9.6, 2.4], VAULT_STONE, false);
     }
     const side = idx % 2 === 0 ? -1 : 1;
     const tx = cx + side * (hw - 0.36);
-    pushInst("vaultTorches", [tx, 3.3, cz], side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, 0, [2.2, 2.2, 2.2], TORCH_WARM);
-    VAULT_TORCHES.push({ x: tx - side * 0.45, y: 3.75, z: cz, color: [1.0, 0.55, 0.2], radius: 9.0, flicker: true });
+    vPush("vaultTorches", [tx, 3.3, cz], side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, 0, [2.2, 2.2, 2.2], TORCH_WARM, false);
+    VAULT_TORCHES.push({ x: tx - side * 0.45, y: 3.75 + riverWaterY(cz), z: cz, color: [1.0, 0.55, 0.2], radius: 9.0, flicker: true });
   });
-  placeVaultProps(pushInst);   // Laufsteg, Nische mit Altar, Podest (vault.js)
+  placeVaultProps(vPush);   // Laufsteg, Nische mit Altar, Podest (vault.js)
 
   // ---------------- Zone 2: Pilzwald ----------------
   // dichte Riesenpilze direkt am Ufer; manche neigen sich als Baldachin über den Fluss

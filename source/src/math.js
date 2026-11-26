@@ -40,8 +40,29 @@ const KZ = (Math.PI * 2.0) / LOOP_LENGTH;
 function wrapZ(z) {
   return -((((-z) % LOOP_LENGTH) + LOOP_LENGTH) % LOOP_LENGTH);
 }
-function riverCenterX(z) {
+function riverBaseX(z) {
   return Math.sin(z * KZ * 2.0) * 7.5 + Math.cos(z * KZ) * 4.2 + Math.sin(z * KZ * 3.0 + 1.3) * 1.6;
+}
+// Abzweig unter die Burg: am Schloss biegt der Fluss nach rechts in den Schlossfelsen ab (Kurve vor dem Tor bei z -160),
+// läuft im Verlies gerade und kehrt erst im Pilzwald auf seinen alten Lauf zurück (Strecke als Abstand vom Start)
+const VAULT_BEND = 16.0;
+function vaultBend(z) {
+  const d = -wrapZ(z);
+  return smoothstep(122.0, 160.0, d) * (1.0 - smoothstep(240.0, 287.0, d));
+}
+function riverCenterX(z) {
+  return riverBaseX(z) + VAULT_BEND * vaultBend(z);
+}
+// Wasserspiegel: im Verlies erst abwärts wie eine Rutsche (z -163 bis -185), dann ebener Grund für Ritual,
+// Wraith und Duell, am Ende bergauf wie ein Kettenlift zum Ausgang in den Pilzwald (z -226 bis -240)
+const VAULT_DROP = 4.0;
+function riverWaterY(z) {
+  const d = -wrapZ(z);
+  return -VAULT_DROP * smoothstep(163.0, 185.0, d) * (1.0 - smoothstep(226.0, 240.0, d));
+}
+// Steigung des Wasserspiegels in z (positiv: zur Fahrtrichtung -z hin geht es abwärts)
+function riverWaterSlope(z) {
+  return (riverWaterY(z + 0.5) - riverWaterY(z - 0.5));
 }
 function riverSlopeX(z) {
   const eps = 0.5;
@@ -105,7 +126,10 @@ function terrainHeight(x, z) {
   const fine = (pnoise(x, z, 0.16, 2) - 0.5) * 0.35 * smoothstep(0.5, 4.0, d);
   // Hügelkamm links in der offenen Ebene, auf dem die Herde zieht
   const ridgeC = x < cx ? _tw[2] * 10.0 * Math.exp(-Math.pow((ax - HERD_RIDGE) / 16.0, 2.0)) : 0.0;
-  return riverDip + lip + Math.max(roll, -0.3) + far + fine + ridgeC;
+  // im Verlies liegt der Fluss tiefer: ein Graben nur so breit wie der Tunnel (die Mauern verdecken ihn)
+  const wy = riverWaterY(z);
+  const trench = wy < 0.0 ? wy * (1.0 - smoothstep(hw + 2.0, hw + 4.5, ax)) : 0.0;
+  return riverDip + lip + Math.max(roll, -0.3) + far + fine + ridgeC + trench;
 }
 
 // Mat4 helpers (column-major)
@@ -189,7 +213,7 @@ const Mat4 = {
 // Das Schloss auf seinem Felsen am Ende des Nebelwalds
 const CASTLE = (() => {
   const z = -150, side = 1;
-  const x = riverCenterX(z) + side * (riverHalfWidth(z) + 19.0);
+  const x = riverBaseX(z) + side * (riverHalfWidth(z) + 19.0);   // ohne den Abzweig: das Schloss bleibt, wo es war
   const gy = terrainHeight(x, z);
   return { x, z, side, gy, rockH: 16.0, top: gy - 2.0 + 16.0 * 0.93 + 28.0 };
 })();

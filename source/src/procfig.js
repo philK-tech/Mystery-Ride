@@ -530,7 +530,7 @@ function _evalJointRot(out, s, limbId, sway, fig) {
   // Kopf dreht sich weich zum Ziel (lookAt)
   if (limbId === "head" && fig.lookAt) {
     const lx = fig.lookAt[0] - fig.x, lz = fig.lookAt[2] - fig.z;
-    const ly = fig.lookAt[1] - (fig.y + fig.top * 0.85);
+    const ly = fig.lookAt[1] - (fig.y + riverWaterY(fig.waterZ !== undefined ? fig.waterZ : fig.z) + fig.top * 0.85);
     let rel = Math.atan2(lx, lz) - fig.yaw;
     rel = Math.atan2(Math.sin(rel), Math.cos(rel));
     ry = lerp(ry, Math.max(-0.9, Math.min(0.9, rel)), 0.8);
@@ -557,7 +557,9 @@ function _computeFigureMatrices(fig) {
   const rdz = (fading ? lerp(rootOf(cur, 2), rootOf(prev, 2), w) : rootOf(cur, 2)) * s;
 
   // Figur in der Welt; die Skalierung steckt nur hier, Glieder und Gelenke bleiben in Modellmaßen
-  _PF_POS[0] = fig.x; _PF_POS[1] = fig.y; _PF_POS[2] = fig.z;
+  // y ist relativ zum Wasserspiegel an dieser Stelle (im Verlies liegt er bis zu 6 m tiefer)
+  // Figuren in einer waagerechten Kammer beziehen sich auf deren Boden (fig.waterZ), alle anderen auf ihr eigenes z
+  _PF_POS[0] = fig.x; _PF_POS[1] = fig.y + riverWaterY(fig.waterZ !== undefined ? fig.waterZ : fig.z); _PF_POS[2] = fig.z;
   _PF_ONE[0] = _PF_ONE[1] = _PF_ONE[2] = s;
   Mat4.compose(_M_TMP, _PF_POS, fig.yaw, 0, 0, _PF_ONE);
   _PF_ONE[0] = _PF_ONE[1] = _PF_ONE[2] = 1;
@@ -590,6 +592,7 @@ function spawnProcFigure(name, o = {}) {
     clipNames: Object.keys(bank),
     visible: o.visible !== undefined ? !!o.visible : true,
     lookAt: null,
+    waterZ: o.waterZ,
     radius: _RADIUS_BY_TYPE[type] * scale, top: _TOP_BY_TYPE[type] * scale,
     _spec: spec, _world: spec.limbs.map(() => Mat4.create()),
     _clipTime: 0, _clipSpeed: 1.0, _prevClip: null, _prevClipTime: 0, _fadeRem: 0, _fadeDur: 0, _done: false,

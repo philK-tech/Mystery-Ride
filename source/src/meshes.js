@@ -43,8 +43,9 @@ function buildWaterSurfaceMesh() {
       const vx = ix / segX;
       const x = cx + (vx * 2.0 - 1.0) * spanX;
       // e0: Nähe zum Ufer (Terrain knapp unter der Wasserlinie) für leuchtenden Uferschaum
-      const shore = smoothstep(-0.7, 0.05, terrainHeight(x, z));
-      b.pushVertex(x, 0.0, z, 0, 1, 0, vx, z, shore, 0.0, 0.0, 1);
+      const wy = riverWaterY(z);
+      const shore = smoothstep(-0.7, 0.05, terrainHeight(x, z) - wy);
+      b.pushVertex(x, wy, z, 0, 1, 0, vx, z, shore, 0.0, 0.0, 1);
     }
   }
   const row = segX + 1;

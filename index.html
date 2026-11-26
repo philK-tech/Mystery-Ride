@@ -177,8 +177,29 @@
     function wrapZ(z) {
       return -((((-z) % LOOP_LENGTH) + LOOP_LENGTH) % LOOP_LENGTH);
     }
-    function riverCenterX(z) {
+    function riverBaseX(z) {
       return Math.sin(z * KZ * 2.0) * 7.5 + Math.cos(z * KZ) * 4.2 + Math.sin(z * KZ * 3.0 + 1.3) * 1.6;
+    }
+    // Abzweig unter die Burg: am Schloss biegt der Fluss nach rechts in den Schlossfelsen ab (Kurve vor dem Tor bei z -160),
+    // läuft im Verlies gerade und kehrt erst im Pilzwald auf seinen alten Lauf zurück (Strecke als Abstand vom Start)
+    const VAULT_BEND = 16.0;
+    function vaultBend(z) {
+      const d = -wrapZ(z);
+      return smoothstep(122.0, 160.0, d) * (1.0 - smoothstep(240.0, 287.0, d));
+    }
+    function riverCenterX(z) {
+      return riverBaseX(z) + VAULT_BEND * vaultBend(z);
+    }
+    // Wasserspiegel: im Verlies erst abwärts wie eine Rutsche (z -163 bis -185), dann ebener Grund für Ritual,
+    // Wraith und Duell, am Ende bergauf wie ein Kettenlift zum Ausgang in den Pilzwald (z -226 bis -240)
+    const VAULT_DROP = 4.0;
+    function riverWaterY(z) {
+      const d = -wrapZ(z);
+      return -VAULT_DROP * smoothstep(163.0, 185.0, d) * (1.0 - smoothstep(226.0, 240.0, d));
+    }
+    // Steigung des Wasserspiegels in z (positiv: zur Fahrtrichtung -z hin geht es abwärts)
+    function riverWaterSlope(z) {
+      return (riverWaterY(z + 0.5) - riverWaterY(z - 0.5));
     }
     function riverSlopeX(z) {
       const eps = 0.5;
@@ -242,7 +263,10 @@
       const fine = (pnoise(x, z, 0.16, 2) - 0.5) * 0.35 * smoothstep(0.5, 4.0, d);
       // Hügelkamm links in der offenen Ebene, auf dem die Herde zieht
       const ridgeC = x < cx ? _tw[2] * 10.0 * Math.exp(-Math.pow((ax - HERD_RIDGE) / 16.0, 2.0)) : 0.0;
-      return riverDip + lip + Math.max(roll, -0.3) + far + fine + ridgeC;
+      // im Verlies liegt der Fluss tiefer: ein Graben nur so breit wie der Tunnel (die Mauern verdecken ihn)
+      const wy = riverWaterY(z);
+      const trench = wy < 0.0 ? wy * (1.0 - smoothstep(hw + 2.0, hw + 4.5, ax)) : 0.0;
+      return riverDip + lip + Math.max(roll, -0.3) + far + fine + ridgeC + trench;
     }
 
     // Mat4 helpers (column-major)
@@ -326,7 +350,7 @@
     // Das Schloss auf seinem Felsen am Ende des Nebelwalds
     const CASTLE = (() => {
       const z = -150, side = 1;
-      const x = riverCenterX(z) + side * (riverHalfWidth(z) + 19.0);
+      const x = riverBaseX(z) + side * (riverHalfWidth(z) + 19.0);   // ohne den Abzweig: das Schloss bleibt, wo es war
       const gy = terrainHeight(x, z);
       return { x, z, side, gy, rockH: 16.0, top: gy - 2.0 + 16.0 * 0.93 + 28.0 };
     })();
@@ -607,8 +631,9 @@
           const vx = ix / segX;
           const x = cx + (vx * 2.0 - 1.0) * spanX;
           // e0: Nähe zum Ufer (Terrain knapp unter der Wasserlinie) für leuchtenden Uferschaum
-          const shore = smoothstep(-0.7, 0.05, terrainHeight(x, z));
-          b.pushVertex(x, 0.0, z, 0, 1, 0, vx, z, shore, 0.0, 0.0, 1);
+          const wy = riverWaterY(z);
+          const shore = smoothstep(-0.7, 0.05, terrainHeight(x, z) - wy);
+          b.pushVertex(x, wy, z, 0, 1, 0, vx, z, shore, 0.0, 0.0, 1);
         }
       }
       const row = segX + 1;
@@ -2532,7 +2557,7 @@
       // Kopf dreht sich weich zum Ziel (lookAt)
       if (limbId === "head" && fig.lookAt) {
         const lx = fig.lookAt[0] - fig.x, lz = fig.lookAt[2] - fig.z;
-        const ly = fig.lookAt[1] - (fig.y + fig.top * 0.85);
+        const ly = fig.lookAt[1] - (fig.y + riverWaterY(fig.waterZ !== undefined ? fig.waterZ : fig.z) + fig.top * 0.85);
         let rel = Math.atan2(lx, lz) - fig.yaw;
         rel = Math.atan2(Math.sin(rel), Math.cos(rel));
         ry = lerp(ry, Math.max(-0.9, Math.min(0.9, rel)), 0.8);
@@ -2559,7 +2584,9 @@
       const rdz = (fading ? lerp(rootOf(cur, 2), rootOf(prev, 2), w) : rootOf(cur, 2)) * s;
 
       // Figur in der Welt; die Skalierung steckt nur hier, Glieder und Gelenke bleiben in Modellmaßen
-      _PF_POS[0] = fig.x; _PF_POS[1] = fig.y; _PF_POS[2] = fig.z;
+      // y ist relativ zum Wasserspiegel an dieser Stelle (im Verlies liegt er bis zu 6 m tiefer)
+      // Figuren in einer waagerechten Kammer beziehen sich auf deren Boden (fig.waterZ), alle anderen auf ihr eigenes z
+      _PF_POS[0] = fig.x; _PF_POS[1] = fig.y + riverWaterY(fig.waterZ !== undefined ? fig.waterZ : fig.z); _PF_POS[2] = fig.z;
       _PF_ONE[0] = _PF_ONE[1] = _PF_ONE[2] = s;
       Mat4.compose(_M_TMP, _PF_POS, fig.yaw, 0, 0, _PF_ONE);
       _PF_ONE[0] = _PF_ONE[1] = _PF_ONE[2] = 1;
@@ -2592,6 +2619,7 @@
         clipNames: Object.keys(bank),
         visible: o.visible !== undefined ? !!o.visible : true,
         lookAt: null,
+        waterZ: o.waterZ,
         radius: _RADIUS_BY_TYPE[type] * scale, top: _TOP_BY_TYPE[type] * scale,
         _spec: spec, _world: spec.limbs.map(() => Mat4.create()),
         _clipTime: 0, _clipSpeed: 1.0, _prevClip: null, _prevClipTime: 0, _fadeRem: 0, _fadeDur: 0, _done: false,
@@ -2672,7 +2700,7 @@
     const VAULT_NORMAL_TINT = [1.0, 1.0, 1.0, 1.0];
 
     const VAULT_SCENES = [
-      { type: "vaultGuard",  z: -172, side: -1, dur: 11.0, trigger: 13.0, slow: 0.14, zoom: 0.25 },
+      { type: "vaultGuard",  z: -172, side: -1, dur: 11.0, trigger: 10.5, slow: 0.14, zoom: 0.25 },
       { type: "vaultRitual", z: -190, side:  1, dur: 11.5, trigger: 14.5, slow: 0.14, zoom: 0.30 },
       { type: "vaultWraith", z: -206, side:  1, dur: 9.0,  trigger: 16.0, slow: 0.12, zoom: 0.20 },
       { type: "vaultDuel",   z: -226, side: -1, dur: 14.0, trigger: 14.0, slow: 0.12, zoom: 0.35 }
@@ -2682,14 +2710,14 @@
     const VAULT_RIT = { z: -190.0, w: 11.6 };
     const VAULT_DUEL = { z: -226.0, w: 12.4 };
 
-    // Feste Lichter an Altar (Szene 2) und Podest (Szene 4)
+    // Feste Lichter an Altar (Szene 2) und Podest (Szene 4), y schon auf Höhe des Wasserspiegels
     const VAULT_LIGHTS = (() => {
       const zRit = VAULT_RIT.z, xRit = riverCenterX(zRit) + (riverHalfWidth(zRit) + 4.2);
       const zDuel = VAULT_DUEL.z, xDuel = riverCenterX(zDuel) - (riverHalfWidth(zDuel) + 6.5);
       return [
-        { x: xRit, y: 2.5, z: zRit, color: [0.35, 0.95, 0.55], radius: 7.5, flicker: true },
-        { x: xDuel, y: 4.2, z: zDuel - 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true },
-        { x: xDuel, y: 4.2, z: zDuel + 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true }
+        { x: xRit, y: 2.5 + riverWaterY(zRit), z: zRit, color: [0.35, 0.95, 0.55], radius: 7.5, flicker: true },
+        { x: xDuel, y: 4.2 + riverWaterY(zDuel), z: zDuel - 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true },
+        { x: xDuel, y: 4.2 + riverWaterY(zDuel), z: zDuel + 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true }
       ];
     })();
 
@@ -2747,13 +2775,13 @@
       // Nische mit Altar (rechts): 4,2 m tief, 6,2 m hoch, Boden auf 1,05
       {
         const z = VAULT_RIT.z, cx = riverCenterX(z), hw = riverHalfWidth(z), D = 4.6, H = 9.0;
-        pushInst("vaultChamber", [cx + (hw + 1.4 + D * 0.5), 1.05 - 0.20 * H, z], -Math.PI * 0.5, 0, 0, [VAULT_RIT.w, H, D], VAULT_STONE_TINT);
-        pushInst("vaultAltar", [cx + (hw + 4.4), 1.05, z], -Math.PI * 0.5, 0, 0, [1.5, 1.15, 1.6], VAULT_ALTAR_TINT);
+        pushInst("vaultChamber", [cx + (hw + 1.4 + D * 0.5), 1.05 - 0.20 * H, z], -Math.PI * 0.5, 0, 0, [VAULT_RIT.w, H, D], VAULT_STONE_TINT, false);
+        pushInst("vaultAltar", [cx + (hw + 4.4), 1.05, z], -Math.PI * 0.5, 0, 0, [1.5, 1.15, 1.6], VAULT_ALTAR_TINT, false);
       }
       // Podest für das Duell (links): 7 m tief, 6,8 m hoch, Boden auf 1,4
       {
         const z = VAULT_DUEL.z, cx = riverCenterX(z), hw = riverHalfWidth(z), D = 7.0, H = 9.5;
-        pushInst("vaultChamber", [cx - (hw + 1.2 + D * 0.5), 1.4 - 0.20 * H, z], Math.PI * 0.5, 0, 0, [VAULT_DUEL.w, H, D], VAULT_STONE_TINT);
+        pushInst("vaultChamber", [cx - (hw + 1.2 + D * 0.5), 1.4 - 0.20 * H, z], Math.PI * 0.5, 0, 0, [VAULT_DUEL.w, H, D], VAULT_STONE_TINT, false);
       }
     }
 
@@ -2771,16 +2799,16 @@
         skelGuardA: spawnProcFigure("skeleton", { ...hidden, x: _vx(-171, -1, 1.15), y: 1.05, z: -171, yaw: Math.PI * 0.5 }),
         skelGuardB: spawnProcFigure("skeleton", { ...hidden, x: _vx(-177, -1, 1.15), y: 1.05, z: -177, yaw: Math.PI * 0.5 }),
         // Szene 2: Kultist rechts vor dem Altar mit Blick zum Fluss, davor steigt ein Skelett auf
-        cultist: spawnProcFigure("cultist", { ...hidden, x: _vx(zR, 1, 3.1), y: 1.05, z: zR, yaw: -Math.PI * 0.5 }),
-        skelRitual: spawnProcFigure("skeleton", { ...hidden, x: _vx(zR, 1, 1.9), y: -0.6, z: zR, yaw: -Math.PI * 0.5, clip: "rise" }),
+        cultist: spawnProcFigure("cultist", { ...hidden, waterZ: zR, x: _vx(zR, 1, 3.1), y: 1.05, z: zR, yaw: -Math.PI * 0.5 }),
+        skelRitual: spawnProcFigure("skeleton", { ...hidden, waterZ: zR, x: _vx(zR, 1, 1.9), y: -0.6, z: zR, yaw: -Math.PI * 0.5, clip: "rise" }),
         // Szene 3: Wraith über dem Wasser
         wraith: spawnProcFigure("wraith", { ...hidden, x: riverCenterX(-208), y: 0.3, z: -208, yaw: 0.0, clip: "rush" }),
         // Szene 4: Held und Boss stehen sich längs gegenüber (halb zum Fluss gedreht), der Gluthund kauert vorn am Rand
         // vom Boot aus (es kommt von +z) liegt der vordere Teil der Kammer hinter ihrer Seitenwand, deshalb stehen alle im hinteren Teil.
         // Abstand Held zu Boss 2,8 m: Schwert (etwa 2,1 m Reichweite mit Ausfallschritt) erreicht die Oberfläche des Bosses (Radius 0,85 m)
-        hero: spawnProcFigure("hero", { ...hidden, x: _vx(-226.0, -1, 3.0), y: 1.4, z: -226.0, yaw: Math.atan2(-1.5, -2.4) }),
-        boss: spawnProcFigure("boss", { ...hidden, x: _vx(-228.4, -1, 4.5), y: 1.4, z: -228.4, yaw: Math.atan2(1.5, 2.4) }),
-        hellhound: spawnProcFigure("hellhound", { ...hidden, x: _vx(-230.5, -1, 2.3), y: 1.4, z: -230.5, yaw: Math.PI * 0.3 })
+        hero: spawnProcFigure("hero", { ...hidden, waterZ: -226.0, x: _vx(-226.0, -1, 3.0), y: 1.4, z: -226.0, yaw: Math.atan2(-1.5, -2.4) }),
+        boss: spawnProcFigure("boss", { ...hidden, waterZ: -226.0, x: _vx(-228.4, -1, 4.5), y: 1.4, z: -228.4, yaw: Math.atan2(1.5, 2.4) }),
+        hellhound: spawnProcFigure("hellhound", { ...hidden, waterZ: -226.0, x: _vx(-230.5, -1, 2.3), y: 1.4, z: -230.5, yaw: Math.PI * 0.3 })
       };
     }
 
@@ -2821,7 +2849,7 @@
           if (st >= 8.2) { _setClipOnce(f.skelGuardB, "g2_roar", "roar", 0.2); cue("skeletonRoar", 8.3, -0.75); }
           else _setClipOnce(f.skelGuardB, "g2_idle", "idle", 0.2);
           focus(f.skelGuardA.x + 0.6, 2.05, f.skelGuardA.z);
-        } else if (aheadDist(-172) > 13.0) {
+        } else if (aheadDist(-172) > 10.5) {
           // vor der Szene: beide stehen reglos
           f.skelGuardA.z = -171.0; f.skelGuardA.x = _vx(-171, -1, 1.15); f.skelGuardA.yaw = Math.PI * 0.5;
           _setClipOnce(f.skelGuardA, "g1_idle", "idle", 0.3);
@@ -3504,6 +3532,8 @@
         float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
         vec2 suv = gl_FragCoord.xy / uScreen + N.xz * vec2(0.035, 0.05);
         vec3 refl = texture(uReflTex, clamp(suv, vec2(0.001), vec2(0.999))).rgb;
+        // im Verlies liegt das Wasser tiefer als die Spiegelebene y = 0: dort keine Spiegelung, nur Fackelglanz
+        refl *= 1.0 - vaultWeight(vWorldPos.z);
         vec3 deep = zw.x * vec3(0.004, 0.006, 0.009) + zw.y * vec3(0.002, 0.010, 0.016) + zw.z * vec3(0.02, 0.07, 0.09);
         vec3 col = mix(deep, refl, 0.35 + 0.6 * fres);
 
@@ -4616,21 +4646,24 @@
       const VAULT_STONE = [0.14, 0.15, 0.19, 1];
       const TORCH_WARM = [1.0, 0.62, 0.22, 1];
       const ROCK_PORTAL_TINT = [0.55, 0.58, 0.65, 1];
+      // Alles im Verlies steht relativ zum Wasserspiegel (riverWaterY) und neigt sich mit dem Gefälle (tilt = false: senkrecht)
+      const vPush = (name, pos, rotY, rotX, rotZ, scale, tint, tilt = true) => pushInst(name,
+        [pos[0], pos[1] + riverWaterY(pos[2]), pos[2]], rotY, rotX + (tilt ? -Math.atan(riverWaterSlope(pos[2])) * Math.cos(rotY) : 0), rotZ, scale, tint);
       // Felstor am Eingang (z = -160) und Portalbogen am Ausgang in den Pilzwald (z = -240)
       for (const [gz, yaw] of [[-160, 0], [-240, Math.PI]]) {
         const cx = riverCenterX(gz);
         const hw = riverHalfWidth(gz) + 2.6;
         const slope = -Math.atan(riverSlopeX(gz));
-        pushInst("vaultGate", [cx, 0.0, gz], slope + yaw, 0, 0, [hw * 2.0, 13.5, 9.5], VAULT_STONE);
+        vPush("vaultGate", [cx, 0.0, gz], slope + yaw, 0, 0, [hw * 2.0, 13.5, 9.5], VAULT_STONE);
         // breite Felswand um das Tor (74 m breit, 18 m hoch), damit man nicht am Tor vorbei ins Verlies sieht
-        pushInst("vaultRockWalls", [cx, -1.0, gz], slope + yaw, 0, 0, [74.0, 19.0, 7.5], ROCK_PORTAL_TINT);
+        vPush("vaultRockWalls", [cx, -1.0, gz], slope + yaw, 0, 0, [74.0, 19.0, 7.5], ROCK_PORTAL_TINT);
       }
       // Gewölberippen über den Fluss
       [-172, -192, -212, -230].forEach((az) => {
         const cx = riverCenterX(az);
         const hw = riverHalfWidth(az) + 2.2;
         const slope = -Math.atan(riverSlopeX(az));
-        pushInst("vaultArches", [cx, 0.0, az], slope, 0, 0, [hw * 2.0, 11.5, 4.2], VAULT_STONE);
+        vPush("vaultArches", [cx, 0.0, az], slope, 0, 0, [hw * 2.0, 11.5, 4.2], VAULT_STONE);
       });
       // Kaimauern beidseitig des Flusses
       const quayStep = 8.0;
@@ -4640,7 +4673,7 @@
         const slope = -Math.atan(riverSlopeX(z));
         for (const side of [-1, 1]) {
           const qx = cx + side * (hw + 0.55);
-          pushInst("vaultQuays", [qx, 0.35, z], slope, 0, 0, [1.3, 1.4, quayStep + 0.4], VAULT_STONE);
+          vPush("vaultQuays", [qx, 0.35, z], slope, 0, 0, [1.3, 1.4, quayStep + 0.4], VAULT_STONE);
         }
       }
       // Seitenwände (4-m-Abschnitte mit 10 % Überlappung, 12 m hoch) und Tonnengewölbe (Scheitel 10,5 m)
@@ -4653,25 +4686,25 @@
         const slope = -Math.atan(riverSlopeX(z));
         for (const side of [-1, 1]) {
           if (vaultWallGap(z, side)) continue;   // Lücken für Nische und Podest (vault.js)
-          pushInst("vaultWalls", [cx + side * (hw + wallCenterOffset), -0.5, z], side < 0 ? slope : slope + Math.PI, 0, 0, [wallThick, 12.0, wallLen], VAULT_STONE);
+          vPush("vaultWalls", [cx + side * (hw + wallCenterOffset), -0.5, z], side < 0 ? slope : slope + Math.PI, 0, 0, [wallThick, 12.0, wallLen], VAULT_STONE);
         }
         // über Nische und Podest setzt das Gewölbe höher an, sonst schneidet es dem Boss (4,3 m) den Oberkörper ab
         const sy0 = vaultWallGap(z, -1) || vaultWallGap(z, 1) ? 8.2 : springY;
-        pushInst("vaultCeiling", [cx, sy0, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY + (sy0 - springY) * 0.3 - sy0) * 2.0, wallLen], VAULT_STONE);
+        vPush("vaultCeiling", [cx, sy0, z], slope, 0, 0, [(hw + 2.35) * 2.0, (vaultApexY + (sy0 - springY) * 0.3 - sy0) * 2.0, wallLen], VAULT_STONE);
       }
       // Säulen; an jeder zweiten hängt eine Fackel zum Fluss hin (abwechselnd links und rechts)
       [-174, -194, -214, -232].forEach((cz, idx) => {
         const cx = riverCenterX(cz);
         const hw = riverHalfWidth(cz) + 1.25;
         for (const side of [-1, 1]) {
-          pushInst("vaultColumns", [cx + side * hw, 4.6, cz], 0, 0, 0, [2.4, 9.6, 2.4], VAULT_STONE);
+          vPush("vaultColumns", [cx + side * hw, 4.6, cz], 0, 0, 0, [2.4, 9.6, 2.4], VAULT_STONE, false);
         }
         const side = idx % 2 === 0 ? -1 : 1;
         const tx = cx + side * (hw - 0.36);
-        pushInst("vaultTorches", [tx, 3.3, cz], side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, 0, [2.2, 2.2, 2.2], TORCH_WARM);
-        VAULT_TORCHES.push({ x: tx - side * 0.45, y: 3.75, z: cz, color: [1.0, 0.55, 0.2], radius: 9.0, flicker: true });
+        vPush("vaultTorches", [tx, 3.3, cz], side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, 0, [2.2, 2.2, 2.2], TORCH_WARM, false);
+        VAULT_TORCHES.push({ x: tx - side * 0.45, y: 3.75 + riverWaterY(cz), z: cz, color: [1.0, 0.55, 0.2], radius: 9.0, flicker: true });
       });
-      placeVaultProps(pushInst);   // Laufsteg, Nische mit Altar, Podest (vault.js)
+      placeVaultProps(vPush);   // Laufsteg, Nische mit Altar, Podest (vault.js)
 
       // ---------------- Zone 2: Pilzwald ----------------
       // dichte Riesenpilze direkt am Ufer; manche neigen sich als Baldachin über den Fluss
@@ -5113,10 +5146,11 @@
     function placeBoat(x, z, yaw, t, eyeOut) {
       // Schütteln durch die Tentakel-Szene (sceneShake aus creatures.js, 0..1)
       const sh = typeof sceneShake === "number" ? sceneShake : 0.0;
-      const pitch = Math.sin(t * 0.9) * 0.025 + Math.sin(t * 2.3) * 0.008 + Math.sin(t * 11.0) * 0.03 * sh;
+      // Gefälle im Verlies: der Bug neigt sich mit dem Wasserspiegel
+      const pitch = -Math.atan(riverWaterSlope(z)) + Math.sin(t * 0.9) * 0.025 + Math.sin(t * 2.3) * 0.008 + Math.sin(t * 11.0) * 0.03 * sh;
       const rock = typeof sceneRock === "number" ? sceneRock : 0.0;
       const roll = Math.sin(t * 0.7 + 1.0) * 0.035 + Math.sin(t * 1.9) * 0.01 + Math.sin(t * 8.3 + 1.0) * 0.07 * sh + rock * 0.12;
-      const y = -BOAT_WATERLINE * BOAT_SCALE[1] + Math.sin(t * 1.3) * 0.04;
+      const y = riverWaterY(z) - BOAT_WATERLINE * BOAT_SCALE[1] + Math.sin(t * 1.3) * 0.04;
       Mat4.compose(boat.model, [x, y, z], yaw, pitch, roll, BOAT_SCALE);
       const m = boat.model;
       const [sx, sy, sz] = BOAT_SEAT;
@@ -5623,10 +5657,10 @@
       updateVault({
         camZ, cam, t, scene: vsc ? vsc.type : null, st: vsc ? sceneT : 0,
         aheadDist: (z) => aheadDist(camZ, z),
-        focus,
+        focus: (x, y, z) => focus(x, y + riverWaterY(z), z),
         duck: (v) => { sceneDuck = Math.max(sceneDuck, v); },
         cue: (name, at, pan) => { if (vsc) cue(vsc, sceneT, name, at, pan); },
-        light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y, z, color, radius, flicker: false }); }
+        light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y: y + riverWaterY(z), z, color, radius, flicker: false }); }
       });
       collectProcFigureDraws(take);   // Glieder der Verliesfiguren (procfig.js)
     }
@@ -5646,7 +5680,7 @@
         if (d < 45.0) _plCand.push({ l, d, k });
       };
       VAULT_TORCHES.forEach((l, i) => add(l, i));
-      VAULT_LIGHTS.forEach((l, i) => add(l, 20 + i));
+      VAULT_LIGHTS.forEach((l, i) => add(l, 20 + i));   // y schon relativ zum Wasser eingerechnet (vault.js)
       sceneLights.forEach((l, i) => add(l, 40 + i));
       _plCand.sort((a, b) => a.d - b.d);
       for (let i = 0; i < Math.min(POINT_LIGHT_MAX, _plCand.length); i++) {
@@ -6588,7 +6622,7 @@
       camEye[0] += Math.sin(heading) * sceneStand * 0.55;
       camEye[1] += sceneStand * 0.55;
       camEye[2] += Math.cos(heading) * sceneStand * 0.55;
-      const pitch = Math.max(-0.8, Math.min(1.0, gaze.pitch + look.pitch - sceneDuck * 0.12 - sceneStand * 0.32));
+      const pitch = Math.max(-0.8, Math.min(1.0, gaze.pitch + look.pitch - sceneDuck * 0.12 - sceneStand * 0.32 - Math.atan(riverWaterSlope(zCur - 4.0)) * 0.8));
       camTarget[0] = camEye[0] - Math.sin(yaw) * Math.cos(pitch) * 10.0;
       camTarget[1] = camEye[1] + Math.sin(pitch) * 10.0;
       camTarget[2] = camEye[2] - Math.cos(yaw) * Math.cos(pitch) * 10.0;

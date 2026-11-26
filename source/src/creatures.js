@@ -496,10 +496,10 @@ function updateCreatures(camZ, t, sceneIdx, sceneT, cam) {
   updateVault({
     camZ, cam, t, scene: vsc ? vsc.type : null, st: vsc ? sceneT : 0,
     aheadDist: (z) => aheadDist(camZ, z),
-    focus,
+    focus: (x, y, z) => focus(x, y + riverWaterY(z), z),
     duck: (v) => { sceneDuck = Math.max(sceneDuck, v); },
     cue: (name, at, pan) => { if (vsc) cue(vsc, sceneT, name, at, pan); },
-    light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y, z, color, radius, flicker: false }); }
+    light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y: y + riverWaterY(z), z, color, radius, flicker: false }); }
   });
   collectProcFigureDraws(take);   // Glieder der Verliesfiguren (procfig.js)
 }
@@ -519,7 +519,7 @@ function gatherPointLights(cam, t) {
     if (d < 45.0) _plCand.push({ l, d, k });
   };
   VAULT_TORCHES.forEach((l, i) => add(l, i));
-  VAULT_LIGHTS.forEach((l, i) => add(l, 20 + i));
+  VAULT_LIGHTS.forEach((l, i) => add(l, 20 + i));   // y schon relativ zum Wasser eingerechnet (vault.js)
   sceneLights.forEach((l, i) => add(l, 40 + i));
   _plCand.sort((a, b) => a.d - b.d);
   for (let i = 0; i < Math.min(POINT_LIGHT_MAX, _plCand.length); i++) {

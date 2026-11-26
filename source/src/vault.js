@@ -8,7 +8,7 @@ const VAULT_RITUAL_GREEN = [0.35, 1.0, 0.55, 1.0];
 const VAULT_NORMAL_TINT = [1.0, 1.0, 1.0, 1.0];
 
 const VAULT_SCENES = [
-  { type: "vaultGuard",  z: -172, side: -1, dur: 11.0, trigger: 13.0, slow: 0.14, zoom: 0.25 },
+  { type: "vaultGuard",  z: -172, side: -1, dur: 11.0, trigger: 10.5, slow: 0.14, zoom: 0.25 },
   { type: "vaultRitual", z: -190, side:  1, dur: 11.5, trigger: 14.5, slow: 0.14, zoom: 0.30 },
   { type: "vaultWraith", z: -206, side:  1, dur: 9.0,  trigger: 16.0, slow: 0.12, zoom: 0.20 },
   { type: "vaultDuel",   z: -226, side: -1, dur: 14.0, trigger: 14.0, slow: 0.12, zoom: 0.35 }
@@ -18,14 +18,14 @@ const VAULT_SCENES = [
 const VAULT_RIT = { z: -190.0, w: 11.6 };
 const VAULT_DUEL = { z: -226.0, w: 12.4 };
 
-// Feste Lichter an Altar (Szene 2) und Podest (Szene 4)
+// Feste Lichter an Altar (Szene 2) und Podest (Szene 4), y schon auf Höhe des Wasserspiegels
 const VAULT_LIGHTS = (() => {
   const zRit = VAULT_RIT.z, xRit = riverCenterX(zRit) + (riverHalfWidth(zRit) + 4.2);
   const zDuel = VAULT_DUEL.z, xDuel = riverCenterX(zDuel) - (riverHalfWidth(zDuel) + 6.5);
   return [
-    { x: xRit, y: 2.5, z: zRit, color: [0.35, 0.95, 0.55], radius: 7.5, flicker: true },
-    { x: xDuel, y: 4.2, z: zDuel - 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true },
-    { x: xDuel, y: 4.2, z: zDuel + 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true }
+    { x: xRit, y: 2.5 + riverWaterY(zRit), z: zRit, color: [0.35, 0.95, 0.55], radius: 7.5, flicker: true },
+    { x: xDuel, y: 4.2 + riverWaterY(zDuel), z: zDuel - 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true },
+    { x: xDuel, y: 4.2 + riverWaterY(zDuel), z: zDuel + 3.5, color: [1.0, 0.62, 0.24], radius: 10.0, flicker: true }
   ];
 })();
 
@@ -83,13 +83,13 @@ function placeVaultProps(pushInst) {
   // Nische mit Altar (rechts): 4,2 m tief, 6,2 m hoch, Boden auf 1,05
   {
     const z = VAULT_RIT.z, cx = riverCenterX(z), hw = riverHalfWidth(z), D = 4.6, H = 9.0;
-    pushInst("vaultChamber", [cx + (hw + 1.4 + D * 0.5), 1.05 - 0.20 * H, z], -Math.PI * 0.5, 0, 0, [VAULT_RIT.w, H, D], VAULT_STONE_TINT);
-    pushInst("vaultAltar", [cx + (hw + 4.4), 1.05, z], -Math.PI * 0.5, 0, 0, [1.5, 1.15, 1.6], VAULT_ALTAR_TINT);
+    pushInst("vaultChamber", [cx + (hw + 1.4 + D * 0.5), 1.05 - 0.20 * H, z], -Math.PI * 0.5, 0, 0, [VAULT_RIT.w, H, D], VAULT_STONE_TINT, false);
+    pushInst("vaultAltar", [cx + (hw + 4.4), 1.05, z], -Math.PI * 0.5, 0, 0, [1.5, 1.15, 1.6], VAULT_ALTAR_TINT, false);
   }
   // Podest für das Duell (links): 7 m tief, 6,8 m hoch, Boden auf 1,4
   {
     const z = VAULT_DUEL.z, cx = riverCenterX(z), hw = riverHalfWidth(z), D = 7.0, H = 9.5;
-    pushInst("vaultChamber", [cx - (hw + 1.2 + D * 0.5), 1.4 - 0.20 * H, z], Math.PI * 0.5, 0, 0, [VAULT_DUEL.w, H, D], VAULT_STONE_TINT);
+    pushInst("vaultChamber", [cx - (hw + 1.2 + D * 0.5), 1.4 - 0.20 * H, z], Math.PI * 0.5, 0, 0, [VAULT_DUEL.w, H, D], VAULT_STONE_TINT, false);
   }
 }
 
@@ -107,16 +107,16 @@ function _initVaultFigures() {
     skelGuardA: spawnProcFigure("skeleton", { ...hidden, x: _vx(-171, -1, 1.15), y: 1.05, z: -171, yaw: Math.PI * 0.5 }),
     skelGuardB: spawnProcFigure("skeleton", { ...hidden, x: _vx(-177, -1, 1.15), y: 1.05, z: -177, yaw: Math.PI * 0.5 }),
     // Szene 2: Kultist rechts vor dem Altar mit Blick zum Fluss, davor steigt ein Skelett auf
-    cultist: spawnProcFigure("cultist", { ...hidden, x: _vx(zR, 1, 3.1), y: 1.05, z: zR, yaw: -Math.PI * 0.5 }),
-    skelRitual: spawnProcFigure("skeleton", { ...hidden, x: _vx(zR, 1, 1.9), y: -0.6, z: zR, yaw: -Math.PI * 0.5, clip: "rise" }),
+    cultist: spawnProcFigure("cultist", { ...hidden, waterZ: zR, x: _vx(zR, 1, 3.1), y: 1.05, z: zR, yaw: -Math.PI * 0.5 }),
+    skelRitual: spawnProcFigure("skeleton", { ...hidden, waterZ: zR, x: _vx(zR, 1, 1.9), y: -0.6, z: zR, yaw: -Math.PI * 0.5, clip: "rise" }),
     // Szene 3: Wraith über dem Wasser
     wraith: spawnProcFigure("wraith", { ...hidden, x: riverCenterX(-208), y: 0.3, z: -208, yaw: 0.0, clip: "rush" }),
     // Szene 4: Held und Boss stehen sich längs gegenüber (halb zum Fluss gedreht), der Gluthund kauert vorn am Rand
     // vom Boot aus (es kommt von +z) liegt der vordere Teil der Kammer hinter ihrer Seitenwand, deshalb stehen alle im hinteren Teil.
     // Abstand Held zu Boss 2,8 m: Schwert (etwa 2,1 m Reichweite mit Ausfallschritt) erreicht die Oberfläche des Bosses (Radius 0,85 m)
-    hero: spawnProcFigure("hero", { ...hidden, x: _vx(-226.0, -1, 3.0), y: 1.4, z: -226.0, yaw: Math.atan2(-1.5, -2.4) }),
-    boss: spawnProcFigure("boss", { ...hidden, x: _vx(-228.4, -1, 4.5), y: 1.4, z: -228.4, yaw: Math.atan2(1.5, 2.4) }),
-    hellhound: spawnProcFigure("hellhound", { ...hidden, x: _vx(-230.5, -1, 2.3), y: 1.4, z: -230.5, yaw: Math.PI * 0.3 })
+    hero: spawnProcFigure("hero", { ...hidden, waterZ: -226.0, x: _vx(-226.0, -1, 3.0), y: 1.4, z: -226.0, yaw: Math.atan2(-1.5, -2.4) }),
+    boss: spawnProcFigure("boss", { ...hidden, waterZ: -226.0, x: _vx(-228.4, -1, 4.5), y: 1.4, z: -228.4, yaw: Math.atan2(1.5, 2.4) }),
+    hellhound: spawnProcFigure("hellhound", { ...hidden, waterZ: -226.0, x: _vx(-230.5, -1, 2.3), y: 1.4, z: -230.5, yaw: Math.PI * 0.3 })
   };
 }
 
@@ -157,7 +157,7 @@ function updateVault(ctx) {
       if (st >= 8.2) { _setClipOnce(f.skelGuardB, "g2_roar", "roar", 0.2); cue("skeletonRoar", 8.3, -0.75); }
       else _setClipOnce(f.skelGuardB, "g2_idle", "idle", 0.2);
       focus(f.skelGuardA.x + 0.6, 2.05, f.skelGuardA.z);
-    } else if (aheadDist(-172) > 13.0) {
+    } else if (aheadDist(-172) > 10.5) {
       // vor der Szene: beide stehen reglos
       f.skelGuardA.z = -171.0; f.skelGuardA.x = _vx(-171, -1, 1.15); f.skelGuardA.yaw = Math.PI * 0.5;
       _setClipOnce(f.skelGuardA, "g1_idle", "idle", 0.3);

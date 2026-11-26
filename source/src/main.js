@@ -496,7 +496,7 @@ function render(now) {
   camEye[0] += Math.sin(heading) * sceneStand * 0.55;
   camEye[1] += sceneStand * 0.55;
   camEye[2] += Math.cos(heading) * sceneStand * 0.55;
-  const pitch = Math.max(-0.8, Math.min(1.0, gaze.pitch + look.pitch - sceneDuck * 0.12 - sceneStand * 0.32));
+  const pitch = Math.max(-0.8, Math.min(1.0, gaze.pitch + look.pitch - sceneDuck * 0.12 - sceneStand * 0.32 - Math.atan(riverWaterSlope(zCur - 4.0)) * 0.8));
   camTarget[0] = camEye[0] - Math.sin(yaw) * Math.cos(pitch) * 10.0;
   camTarget[1] = camEye[1] + Math.sin(pitch) * 10.0;
   camTarget[2] = camEye[2] - Math.cos(yaw) * Math.cos(pitch) * 10.0;

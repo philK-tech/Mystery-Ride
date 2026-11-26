@@ -523,6 +523,8 @@ void main() {
     float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
     vec2 suv = gl_FragCoord.xy / uScreen + N.xz * vec2(0.035, 0.05);
     vec3 refl = texture(uReflTex, clamp(suv, vec2(0.001), vec2(0.999))).rgb;
+    // im Verlies liegt das Wasser tiefer als die Spiegelebene y = 0: dort keine Spiegelung, nur Fackelglanz
+    refl *= 1.0 - vaultWeight(vWorldPos.z);
     vec3 deep = zw.x * vec3(0.004, 0.006, 0.009) + zw.y * vec3(0.002, 0.010, 0.016) + zw.z * vec3(0.02, 0.07, 0.09);
     vec3 col = mix(deep, refl, 0.35 + 0.6 * fres);
 
