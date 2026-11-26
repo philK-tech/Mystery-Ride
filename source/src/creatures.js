@@ -502,8 +502,20 @@ function updateCreatures(camZ, t, sceneIdx, sceneT, cam) {
     light: (x, y, z, color, radius) => { if (sceneLights.length < 4) sceneLights.push({ x, y: y + riverWaterY(z), z, color, radius, flicker: false }); }
   });
   collectProcFigureDraws(take);   // Glieder der Verliesfiguren (procfig.js)
+
+  // Fallgatter am Eingang und Flügeltor am Ausgang (gates.js)
+  const gdt = _gateLastT === null ? 0 : Math.max(0, Math.min(0.1, t - _gateLastT));
+  _gateLastT = t;
+  updateVaultGates({
+    cam, camZ, dt: gdt,
+    aheadDist: (z) => aheadDist(camZ, z),
+    cue: (name, pan) => { if (typeof sfx === "function") sfx(name, pan || 0); },
+    light: (x, y, z, color, radius) => { if (sceneLights.length < 6 && Math.abs(z - cam[2]) < 40) sceneLights.push({ x, y: y + riverWaterY(z), z, color, radius, flicker: false }); }
+  });
+  collectVaultGateDraws(take);
 }
 
+let _gateLastT = null;
 // Lichter, die Szenen für ein Bild setzen (höchstens 4), zusätzlich zu Fackeln und festen Lichtern
 const sceneLights = [];
 // Punktlichter für den Shader: die 8 nächsten aus Fackeln, festen Lichtern und Szenenlichtern

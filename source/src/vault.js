@@ -1,6 +1,5 @@
 // vault.js: Verlies-Szenen (z = -160 bis -240), Laufsteg, Nische, Podest und Figurensteuerung
-// Entwurf von Gemini; eingebaut und korrigiert (Wraith über statt durch das Boot, Duellanten einander zugewandt,
-// Kultist vor dem Altar, Skelett erst bei der Beschwörung sichtbar, Wandlücken so breit wie Nische und Podest)
+// Angepasst für kollisionsfreie Bewegung (Gangwände, Säulen, Nische, Podest, Boot) und präzise Treffer (strikeAt).
 
 const VAULT_STONE_TINT = [0.14, 0.15, 0.19, 1.0];
 const VAULT_ALTAR_TINT = [0.18, 0.20, 0.24, 1.0];
@@ -14,11 +13,9 @@ const VAULT_SCENES = [
   { type: "vaultDuel",   z: -226, side: -1, dur: 14.0, trigger: 14.0, slow: 0.12, zoom: 0.35 }
 ];
 
-// Nische (rechts) und Podest (links): Breite = Lücke in den Seitenwänden (Wandabschnitte alle 4 m, je 4,4 m lang)
 const VAULT_RIT = { z: -190.0, w: 11.6 };
 const VAULT_DUEL = { z: -226.0, w: 12.4 };
 
-// Feste Lichter an Altar (Szene 2) und Podest (Szene 4), y schon auf Höhe des Wasserspiegels
 const VAULT_LIGHTS = (() => {
   const zRit = VAULT_RIT.z, xRit = riverCenterX(zRit) + (riverHalfWidth(zRit) + 4.2);
   const zDuel = VAULT_DUEL.z, xDuel = riverCenterX(zDuel) - (riverHalfWidth(zDuel) + 6.5);
@@ -29,14 +26,12 @@ const VAULT_LIGHTS = (() => {
   ];
 })();
 
-// Wandlücken in vaultWalls für Nische (rechts) und Podest (links)
 function vaultWallGap(z, side) {
-  if (side > 0 && z <= -185.0 && z >= -195.0) return true;   // Abschnitte -186, -190, -194
-  if (side < 0 && z <= -221.0 && z >= -231.0) return true;   // Abschnitte -222, -226, -230
+  if (side > 0 && z <= -185.0 && z >= -195.0) return true;
+  if (side < 0 && z <= -221.0 && z >= -231.0) return true;
   return false;
 }
 
-// --- Prozedurale Bauteile für Laufsteg, Nische/Altar und Duell-Podest ---
 function buildVaultWalkwayMesh() {
   const b = createGeometryBuilder();
   addBox(b, [0, -0.10, 0], [1.0, 0.20, 1.0], 0, 0, 36, 0.0);
@@ -56,7 +51,6 @@ function buildVaultAltarMesh() {
   return b;
 }
 
-// Kammer: x -0.5..0.5 (Breite), y 0..1, z -0.5..0.5 (Tiefe, Rückwand bei -z), vorne offen
 function buildVaultChamberMesh() {
   const b = createGeometryBuilder();
   addBox(b, [0, 0.10, 0], [1.0, 0.20, 1.0], 0, 0, 36, 0.0);
@@ -75,26 +69,22 @@ const VAULT_PROP_GROUPS = [
 ];
 
 function placeVaultProps(pushInst) {
-  // Laufsteg beidseitig zwischen Kaimauer (+0,71) und Wand (+1,60), Oberkante y = 1,05
   for (let z = -158.0; z >= -242.0; z -= 4.0) {
     const cx = riverCenterX(z), hw = riverHalfWidth(z), slope = -Math.atan(riverSlopeX(z));
     for (const side of [-1, 1]) pushInst("vaultWalkway", [cx + side * (hw + 1.155), 1.05, z], slope, 0, 0, [0.95, 1.0, 4.32], VAULT_STONE_TINT);
   }
-  // Nische mit Altar (rechts): 4,2 m tief, 6,2 m hoch, Boden auf 1,05
   {
     const z = VAULT_RIT.z, cx = riverCenterX(z), hw = riverHalfWidth(z), D = 4.6, H = 9.0;
     pushInst("vaultChamber", [cx + (hw + 1.4 + D * 0.5), 1.05 - 0.20 * H, z], -Math.PI * 0.5, 0, 0, [VAULT_RIT.w, H, D], VAULT_STONE_TINT, false);
     pushInst("vaultAltar", [cx + (hw + 4.4), 1.05, z], -Math.PI * 0.5, 0, 0, [1.5, 1.15, 1.6], VAULT_ALTAR_TINT, false);
   }
-  // Podest für das Duell (links): 7 m tief, 6,8 m hoch, Boden auf 1,4
   {
     const z = VAULT_DUEL.z, cx = riverCenterX(z), hw = riverHalfWidth(z), D = 7.0, H = 9.5;
     pushInst("vaultChamber", [cx - (hw + 1.2 + D * 0.5), 1.4 - 0.20 * H, z], Math.PI * 0.5, 0, 0, [VAULT_DUEL.w, H, D], VAULT_STONE_TINT, false);
   }
 }
 
-// --- Figuren (genau einmal beim ersten updateVault-Aufruf erzeugt) ---
-const _vault = { inited: false, figs: null };
+const _vault = { inited: false, reported: false, figs: null, heroTarget: [0, 0, 0], bossTarget: [0, 0, 0] };
 const _vx = (z, side, off) => riverCenterX(z) + side * (riverHalfWidth(z) + off);
 
 function _initVaultFigures() {
@@ -102,22 +92,26 @@ function _initVaultFigures() {
   _vault.inited = true;
   const hidden = { tint: VAULT_NORMAL_TINT, clip: "idle", visible: false, scale: 1.0 };
   const zR = VAULT_RIT.z, zD = VAULT_DUEL.z;
+
+  // Positionen auf 0.88 m ab Ufer auf dem Steg (Mitte zwischen Kaimauer 0.71 m und Wand 1.60 m, Abstand zu Säulen bei 1.25 m und Wand bei 1.60 m)
   _vault.figs = {
-    // Szene 1: zwei Skelette links auf dem Steg, mit Blick zum Fluss (yaw PI/2 = +x)
-    skelGuardA: spawnProcFigure("skeleton", { ...hidden, x: _vx(-171, -1, 1.15), y: 1.05, z: -171, yaw: Math.PI * 0.5 }),
-    skelGuardB: spawnProcFigure("skeleton", { ...hidden, x: _vx(-177, -1, 1.15), y: 1.05, z: -177, yaw: Math.PI * 0.5 }),
-    // Szene 2: Kultist rechts vor dem Altar mit Blick zum Fluss, davor steigt ein Skelett auf
+    skelGuardA: spawnProcFigure("skeleton", { ...hidden, x: _vx(-170.5, -1, 0.88), y: 1.05, z: -170.5, yaw: Math.PI * 0.5 }),
+    skelGuardB: spawnProcFigure("skeleton", { ...hidden, x: _vx(-177.2, -1, 0.88), y: 1.05, z: -177.2, yaw: Math.PI * 0.5 }),
     cultist: spawnProcFigure("cultist", { ...hidden, waterZ: zR, x: _vx(zR, 1, 3.1), y: 1.05, z: zR, yaw: -Math.PI * 0.5 }),
-    skelRitual: spawnProcFigure("skeleton", { ...hidden, waterZ: zR, x: _vx(zR, 1, 1.9), y: -0.6, z: zR, yaw: -Math.PI * 0.5, clip: "rise" }),
-    // Szene 3: Wraith über dem Wasser
-    wraith: spawnProcFigure("wraith", { ...hidden, x: riverCenterX(-208), y: 0.3, z: -208, yaw: 0.0, clip: "rush" }),
-    // Szene 4: Held und Boss stehen sich längs gegenüber (halb zum Fluss gedreht), der Gluthund kauert vorn am Rand
-    // vom Boot aus (es kommt von +z) liegt der vordere Teil der Kammer hinter ihrer Seitenwand, deshalb stehen alle im hinteren Teil.
-    // Abstand Held zu Boss 2,8 m: Schwert (etwa 2,1 m Reichweite mit Ausfallschritt) erreicht die Oberfläche des Bosses (Radius 0,85 m)
-    hero: spawnProcFigure("hero", { ...hidden, waterZ: -226.0, x: _vx(-226.0, -1, 3.0), y: 1.4, z: -226.0, yaw: Math.atan2(-1.5, -2.4) }),
-    boss: spawnProcFigure("boss", { ...hidden, waterZ: -226.0, x: _vx(-228.4, -1, 4.5), y: 1.4, z: -228.4, yaw: Math.atan2(1.5, 2.4) }),
-    hellhound: spawnProcFigure("hellhound", { ...hidden, waterZ: -226.0, x: _vx(-230.5, -1, 2.3), y: 1.4, z: -230.5, yaw: Math.PI * 0.3 })
+    skelRitual: spawnProcFigure("skeleton", { ...hidden, waterZ: zR, x: _vx(zR, 1, 1.95), y: -0.6, z: zR, yaw: -Math.PI * 0.5, clip: "rise" }),
+    wraith: spawnProcFigure("wraith", { ...hidden, x: riverCenterX(-208), y: 0.45, z: -208, yaw: 0.0, clip: "rush" }),
+    // Szene 4: Held und Boss auf dem Podest mit ~2.7 m Abstand, sicher entfernt von Säule (-232, +1.25) und Rückwand (+7.6)
+    hero: spawnProcFigure("hero", { ...hidden, waterZ: zD, x: _vx(-225.8, -1, 3.35), y: 1.4, z: -225.8, yaw: Math.atan2(-1.1, -2.5) }),
+    boss: spawnProcFigure("boss", { ...hidden, waterZ: zD, x: _vx(-228.3, -1, 4.45), y: 1.4, z: -228.3, yaw: Math.atan2(1.1, 2.5) }),
+    hellhound: spawnProcFigure("hellhound", { ...hidden, waterZ: zD, x: _vx(-230.2, -1, 2.6), y: 1.4, z: -230.2, yaw: Math.PI * 0.3 })
   };
+
+  if (!_vault.reported && typeof vaultClearanceReport === "function") {
+    _vault.reported = true;
+    const rep = vaultClearanceReport();
+    if (rep.length === 0) console.log("[vaultClearanceReport] 0 Verstöße.");
+    else console.warn("[vaultClearanceReport] Verstöße:", rep);
+  }
 }
 
 function _setClipOnce(fig, key, clip, blend = 0.2, speed = 1.0) {
@@ -135,8 +129,8 @@ function updateVault(ctx) {
 
   // --- Szene 1: Wache der Toten (z ≈ -172, links) ---
   {
-    f.skelGuardA.visible = inRange(-171.0);
-    f.skelGuardB.visible = inRange(-177.0);
+    f.skelGuardA.visible = inRange(-170.5);
+    f.skelGuardB.visible = inRange(-177.2);
     if (scene === "vaultGuard") {
       if (st < 2.2) {
         _setClipOnce(f.skelGuardA, "g1_alert", "alert", 0.2);
@@ -148,18 +142,24 @@ function updateVault(ctx) {
       } else {
         _setClipOnce(f.skelGuardA, "g1_walk", "walk", 0.25, 1.05);
         f.skelGuardA.lookAt = null;
-        const z = -171.0 - Math.min(1.0, (st - 5.0) / 6.0) * 2.2;
+        // Geht nur bis z = -172.3 (bleibt mindestens 1.7 m vor der Säule bei z = -174)
+        const z = -170.5 - Math.min(1.0, (st - 5.0) / 6.0) * 1.8;
         f.skelGuardA.z = z;
-        f.skelGuardA.x = _vx(z, -1, 1.15);
-        f.skelGuardA.yaw = Math.PI * 0.85;   // geht Richtung Ausgang (-z), leicht zum Fluss gedreht
+        f.skelGuardA.x = _vx(z, -1, 0.88);
+        f.skelGuardA.yaw = Math.PI * 0.92;
         cue("footstepStone", 5.2, -0.6);
       }
-      if (st >= 8.2) { _setClipOnce(f.skelGuardB, "g2_roar", "roar", 0.2); cue("skeletonRoar", 8.3, -0.75); }
-      else _setClipOnce(f.skelGuardB, "g2_idle", "idle", 0.2);
+      if (st >= 8.2) {
+        _setClipOnce(f.skelGuardB, "g2_roar", "roar", 0.2);
+        cue("skeletonRoar", 8.3, -0.75);
+      } else {
+        _setClipOnce(f.skelGuardB, "g2_idle", "idle", 0.2);
+      }
       focus(f.skelGuardA.x + 0.6, 2.05, f.skelGuardA.z);
     } else if (aheadDist(-172) > 10.5) {
-      // vor der Szene: beide stehen reglos
-      f.skelGuardA.z = -171.0; f.skelGuardA.x = _vx(-171, -1, 1.15); f.skelGuardA.yaw = Math.PI * 0.5;
+      f.skelGuardA.z = -170.5;
+      f.skelGuardA.x = _vx(-170.5, -1, 0.88);
+      f.skelGuardA.yaw = Math.PI * 0.5;
       _setClipOnce(f.skelGuardA, "g1_idle", "idle", 0.3);
       _setClipOnce(f.skelGuardB, "g2_idle", "idle", 0.3);
     }
@@ -186,8 +186,12 @@ function updateVault(ctx) {
         cue("boneRattle", 3.0, 0.65);
         light(f.skelRitual.x, 1.9, zR, [0.25 * 3, 1.0 * 3, 0.5 * 3 * pulse], 8.5);
       } else {
-        if (st < 8.6) { _setClipOnce(f.cultist, "r_cast", "cast", 0.2); cue("ritualBurst", 7.3, 0.75); }
-        else _setClipOnce(f.cultist, "r_alert", "alert", 0.25);
+        if (st < 8.6) {
+          _setClipOnce(f.cultist, "r_cast", "cast", 0.2);
+          cue("ritualBurst", 7.3, 0.75);
+        } else {
+          _setClipOnce(f.cultist, "r_alert", "alert", 0.25);
+        }
         f.cultist.tint = VAULT_NORMAL_TINT;
         f.skelRitual.visible = true;
         f.skelRitual.y = 1.05;
@@ -196,19 +200,17 @@ function updateVault(ctx) {
       }
       focus(f.skelRitual.x, 2.0, zR);
     } else if (aheadDist(zR) > 14.5) {
-      // vor der Szene: Kultist steht still, das Skelett liegt noch unter dem Boden
       f.cultist.tint = VAULT_NORMAL_TINT;
       _setClipOnce(f.cultist, "r_idle0", "idle", 0.3);
       f.skelRitual.visible = false;
       f.skelRitual.y = -0.6;
     } else {
-      // nach der Szene: das Skelett bleibt stehen
       f.skelRitual.visible = inRange(zR);
       f.skelRitual.y = 1.05;
     }
   }
 
-  // --- Szene 3: Der Wraith (z ≈ -206): kommt über das Wasser, kreischt vor dem Bug, zieht über das Boot hinweg ---
+  // --- Szene 3: Der Wraith (z ≈ -206) ---
   {
     f.wraith.visible = scene === "vaultWraith";
     if (scene === "vaultWraith") {
@@ -217,28 +219,27 @@ function updateVault(ctx) {
         const u = st / 4.2;
         const zW = lerp(zStart, zRoar, u * u * (3.0 - 2.0 * u));
         f.wraith.z = zW;
-        f.wraith.x = riverCenterX(zW) + Math.sin(st * 1.4) * 0.8;
-        f.wraith.y = 0.3 + Math.sin(st * 3.0) * 0.08;
+        f.wraith.x = riverCenterX(zW) + Math.sin(st * 1.4) * 0.65;
+        f.wraith.y = 0.45 + Math.sin(st * 3.0) * 0.08;
         f.wraith.yaw = 0.0;
         _setClipOnce(f.wraith, "w_rush", "rush", 0.2, 1.1);
         light(f.wraith.x, 1.2, f.wraith.z, [0.35, 0.6, 0.9], 6.0);
       } else if (st < 5.7) {
         f.wraith.z = zRoar;
         f.wraith.x = riverCenterX(zRoar);
-        f.wraith.y = 0.35 + (st - 4.2) * 0.5;   // richtet sich beim Kreischen auf
+        f.wraith.y = 0.50 + (st - 4.2) * 0.65;
         f.wraith.yaw = 0.0;
         _setClipOnce(f.wraith, "w_shriek", "shriek", 0.15);
         cue("wraithShriek", 4.25, 0.0);
         duck(0.25);
         light(f.wraith.x, 1.8, f.wraith.z, [0.6, 1.0, 1.4], 9.0);
       } else {
-        // steigt schnell auf Kopfhöhe (Füße 2,3 m, Kamera geduckt bei 1,7 m) und zieht nach hinten über das Boot
         const u = Math.min(1.0, (st - 5.7) / 2.2);
         const zW = lerp(zRoar, cam[2] + 8.0, u);
         f.wraith.z = zW;
         f.wraith.x = riverCenterX(zW);
-        // weich vom Kreischen (y 0,8) auf 2,15 m: Unterkante über der geduckten Kamera, bevor er den Bug erreicht
-        f.wraith.y = lerp(0.825, 2.15, smoothstep(0.0, 0.15, u)) + 0.45 * Math.sin(u * Math.PI);
+        // Höhe >= 2.35 m über dem Wasser, damit selbst die tiefsten Mantelspitzen über dem Boot (y <= 1.3 m) bleiben
+        f.wraith.y = lerp(1.48, 2.38, smoothstep(0.0, 0.15, u)) + 0.45 * Math.sin(u * Math.PI);
         f.wraith.yaw = 0.0;
         f.wraith.visible = u < 1.0;
         _setClipOnce(f.wraith, "w_pass", "rush", 0.2, 1.25);
@@ -253,65 +254,94 @@ function updateVault(ctx) {
   // --- Szene 4: Das Duell (z ≈ -226, links auf dem Podest) ---
   {
     const zD = VAULT_DUEL.z;
+    const baseD = riverWaterY(zD);
     f.hero.visible = f.boss.visible = inRange(zD);
     f.hellhound.visible = inRange(zD) && f.hellhound.z > -238.5;
     const flash = (fig, k) => light(fig.x + 0.6, 2.6, fig.z, [1.0 * k, 0.75 * k, 0.35 * k], 6.5);
+
+    // Zielpunkte für strikeAt vorbereiten (keine Objektallokation)
+    _vault.heroTarget[0] = f.boss.x + 0.35;
+    _vault.heroTarget[1] = f.boss.y + baseD + 1.95;
+    _vault.heroTarget[2] = f.boss.z + 0.45;
+
+    _vault.bossTarget[0] = f.hero.x - 0.15;
+    _vault.bossTarget[1] = f.hero.y + baseD + 1.25;
+    _vault.bossTarget[2] = f.hero.z - 0.15;
+
     if (scene === "vaultDuel") {
       if (st < 2.0) {
+        f.hero.strikeAt = null;
+        f.boss.strikeAt = null;
         _setClipOnce(f.boss, "d_boss_roar", "roar", 0.2);
         _setClipOnce(f.hero, "d_hero_idle1", "idle", 0.2);
         _setClipOnce(f.hellhound, "d_dog_look", "look", 0.2);
         cue("bossRoar", 0.2, -0.75);
       } else if (st < 3.0) {
+        f.hero.strikeAt = _vault.heroTarget;
+        f.boss.strikeAt = null;
         _setClipOnce(f.hero, "d_hero_a1", "attack1", 0.12);
         _setClipOnce(f.boss, "d_boss_hit1", "hit", 0.12);
         cue("swordClash", 2.25, -0.7);
         if (st < 2.5) flash(f.boss, 3);
       } else if (st < 4.2) {
+        f.hero.strikeAt = _vault.heroTarget;
+        f.boss.strikeAt = _vault.bossTarget;
         _setClipOnce(f.hero, "d_hero_a2", "attack2", 0.12);
         _setClipOnce(f.boss, "d_boss_atk1", "attack", 0.15);
         cue("swordClash", 3.2, -0.7);
         if (st < 3.5) flash(f.hero, 3);
       } else if (st < 5.5) {
+        f.hero.strikeAt = _vault.heroTarget;
+        f.boss.strikeAt = null;
         _setClipOnce(f.hero, "d_hero_a3", "attack3", 0.12);
         _setClipOnce(f.boss, "d_boss_hit2", "hit", 0.12);
         cue("swordClash", 4.45, -0.7);
         if (st < 4.8) flash(f.boss, 3);
       } else if (st < 7.2) {
+        f.hero.strikeAt = _vault.heroTarget;
+        f.boss.strikeAt = null;
         _setClipOnce(f.hero, "d_hero_h1", "heavy", 0.12);
         _setClipOnce(f.boss, "d_boss_hit3", "hit", 0.12);
         cue("swordClash", 5.8, -0.75);
         if (st < 6.2) flash(f.boss, 4);
       } else if (st < 8.3) {
+        f.hero.strikeAt = null;
+        f.boss.strikeAt = _vault.bossTarget;
         _setClipOnce(f.hero, "d_hero_block", "block", 0.15);
         _setClipOnce(f.boss, "d_boss_atk2", "attack", 0.15);
         cue("bossRoar", 7.3, -0.75);
       } else if (st < 9.6) {
+        f.hero.strikeAt = _vault.heroTarget;
+        f.boss.strikeAt = null;
         _setClipOnce(f.hero, "d_hero_h2", "heavy", 0.12);
         _setClipOnce(f.boss, "d_boss_hit4", "hit", 0.12);
         cue("swordClash", 8.6, -0.75);
         if (st < 9.0) flash(f.boss, 4);
       } else {
+        f.hero.strikeAt = null;
+        f.boss.strikeAt = null;
         _setClipOnce(f.boss, "d_boss_death", "death", 0.15);
         _setClipOnce(f.hero, "d_hero_stand", "victory", 0.35);
         _setClipOnce(f.hellhound, "d_dog_run", "run", 0.15, 1.35);
         cue("bossFall", 9.75, -0.75);
         cue("hellhoundWhine", 9.85, -0.65);
-        // Gluthund flieht in die Tiefe der Kammer und verschwindet im Dunkel (nicht durch Säule und Wand zum Ausgang)
         const k = Math.min(1.0, Math.max(0.0, (st - 9.6) / 1.3));
-        f.hellhound.z = lerp(-230.5, -231.3, k);
-        f.hellhound.x = _vx(f.hellhound.z, -1, lerp(2.3, 7.0, k));
+        f.hellhound.z = lerp(-230.2, -231.0, k);
+        f.hellhound.x = _vx(f.hellhound.z, -1, lerp(2.6, 6.8, k));
         f.hellhound.yaw = -Math.PI * 0.5 - 0.15;
         if (k >= 1.0) f.hellhound.z = -240.0;
       }
       focus(lerp(f.hero.x, f.boss.x, 0.5) + 0.3, 2.8, lerp(f.hero.z, f.boss.z, 0.5));
     } else if (aheadDist(zD) > 14.0) {
-      // vor der Szene
-      f.hellhound.z = -230.5; f.hellhound.x = _vx(-230.5, -1, 2.3); f.hellhound.y = 1.4; f.hellhound.yaw = Math.PI * 0.3;
+      f.hero.strikeAt = null;
+      f.boss.strikeAt = null;
+      f.hellhound.z = -230.2;
+      f.hellhound.x = _vx(-230.2, -1, 2.6);
+      f.hellhound.y = 1.4;
+      f.hellhound.yaw = Math.PI * 0.3;
       _setClipOnce(f.boss, "d_boss_idle0", "idle", 0.3);
       _setClipOnce(f.hero, "d_hero_idle0", "idle", 0.3);
       _setClipOnce(f.hellhound, "d_dog_idle0", "idle", 0.3);
     }
-    // nach der Szene bleibt alles, wie es ist: der Boss liegt, der Held steht, der Hund ist fort
   }
 }

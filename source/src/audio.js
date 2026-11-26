@@ -309,8 +309,12 @@ function toneSweep(dest, when, dur, wave, f0, f1, vol) {
   o.connect(g); g.connect(dest); o.start(when); o.stop(when + dur + 0.05);
 }
 
+// Geräusche des Verlieses (Entwurf von Gemini): vaultSfx weiter unten
+const VAULT_SFX = new Set(["boneRattle", "footstepStone", "skeletonRoar", "chant", "ritualBurst", "wraithShriek", "wraithWhoosh",
+  "bossRoar", "swordClash", "bossFall", "hellhoundWhine", "chainRattle", "gateSlam", "doorCreak"]);
 function sfx(name, pan = 0) {
   if (!audioCtx || !audioEnabled) return;
+  if (VAULT_SFX.has(name)) { vaultSfx(name, pan); return; }
   const now = audioCtx.currentTime;
   if (name === "batsFlutter") {
     // Schwarm steigt auf: viele schnelle, leise Flügelschläge und hohe Pieptöne
@@ -428,4 +432,243 @@ function playHowl() {
   }
   vib.start(now);
   vib.stop(now + 3.6);
+}
+
+// vaultSfx(name, pan) für audio.js
+// Alle Geräusche verwenden maximal 25 Web-Audio-Knoten und trennen alle Knoten nach Ablauf sauber wieder ab.
+
+function vaultSfx(name, pan = 0.0) {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const cleanup = (nodes, delaySec) => {
+    setTimeout(() => {
+      for (let i = 0; i < nodes.length; i++) {
+        try { nodes[i].disconnect(); } catch (_) {}
+      }
+    }, Math.ceil((delaySec + 0.15) * 1000));
+  };
+
+  if (name === "boneRattle") {
+    const o = sfxOut(pan, 0.55);
+    const nodes = [o.g];
+    const hits = [0.0, 0.07, 0.16, 0.24, 0.35];
+    for (let i = 0; i < hits.length; i++) {
+      const t0 = now + hits[i];
+      noiseHit(o.g, t0, 0.06, "bandpass", 1400 + i * 220, 900, 4.5, 0.35, 0.004);
+      toneSweep(o.g, t0, 0.045, "triangle", 520 + i * 65, 240, 0.18);
+    }
+    cleanup(nodes, 0.5);
+    return;
+  }
+
+  if (name === "footstepStone") {
+    const o = sfxOut(pan, 0.50);
+    const nodes = [o.g];
+    for (let i = 0; i < 4; i++) {
+      const t0 = now + i * 0.48;
+      noiseHit(o.g, t0, 0.11, "bandpass", 420, 160, 2.2, 0.42, 0.008);
+      toneSweep(o.g, t0, 0.09, "sine", 115, 52, 0.28);
+    }
+    cleanup(nodes, 2.1);
+    return;
+  }
+
+  if (name === "skeletonRoar") {
+    const o = sfxOut(pan, 0.65);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 0.85, "bandpass", 680, 290, 3.2, 0.45, 0.06);
+    toneSweep(o.g, now, 0.80, "sawtooth", 210, 95, 0.22);
+    toneSweep(o.g, now + 0.05, 0.75, "square", 155, 72, 0.14);
+    cleanup(nodes, 0.95);
+    return;
+  }
+
+  if (name === "chant") {
+    // Etwa 4 s tiefe Chorstimmen aus verstimmten Sägezähnen durch Formantfilter (11 Knoten gesamt)
+    const o = sfxOut(pan, 0.48);
+    const dur = 4.0;
+    const f1 = audioCtx.createBiquadFilter();
+    f1.type = "bandpass";
+    f1.frequency.setValueAtTime(340, now);
+    f1.frequency.linearRampToValueAtTime(410, now + 2.0);
+    f1.frequency.linearRampToValueAtTime(310, now + dur);
+    f1.Q.value = 3.8;
+
+    const f2 = audioCtx.createBiquadFilter();
+    f2.type = "bandpass";
+    f2.frequency.setValueAtTime(760, now);
+    f2.frequency.linearRampToValueAtTime(860, now + 2.0);
+    f2.frequency.linearRampToValueAtTime(700, now + dur);
+    f2.Q.value = 4.5;
+
+    const env = audioCtx.createGain();
+    env.gain.setValueAtTime(0.001, now);
+    env.gain.linearRampToValueAtTime(0.32, now + 0.65);
+    env.gain.setValueAtTime(0.30, now + 3.1);
+    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    f1.connect(env);
+    f2.connect(env);
+    env.connect(o.g);
+
+    const nodes = [o.g, f1, f2, env];
+    const freqs = [73.4, 74.1, 110.0, 109.2, 146.8];
+    for (let i = 0; i < freqs.length; i++) {
+      const osc = audioCtx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freqs[i], now);
+      osc.frequency.linearRampToValueAtTime(freqs[i] * 0.97, now + dur);
+      osc.connect(f1);
+      osc.connect(f2);
+      osc.start(now);
+      osc.stop(now + dur + 0.02);
+      nodes.push(osc);
+    }
+    cleanup(nodes, dur + 0.05);
+    return;
+  }
+
+  if (name === "ritualBurst") {
+    const o = sfxOut(pan, 0.72);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 0.95, "bandpass", 1800, 220, 1.8, 0.55, 0.015);
+    toneSweep(o.g, now, 0.55, "sawtooth", 320, 58, 0.35);
+    toneSweep(o.g, now, 0.85, "sine", 140, 38, 0.42);
+    cleanup(nodes, 1.05);
+    return;
+  }
+
+  if (name === "wraithShriek") {
+    const o = sfxOut(pan, 0.75);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 1.15, "bandpass", 2400, 1350, 5.5, 0.45, 0.05);
+    toneSweep(o.g, now, 1.10, "sawtooth", 1180, 640, 0.26);
+    toneSweep(o.g, now + 0.04, 1.05, "sine", 1740, 920, 0.22);
+    cleanup(nodes, 1.25);
+    return;
+  }
+
+  if (name === "wraithWhoosh") {
+    const o = sfxOut(pan, 0.68);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 1.35, "bandpass", 320, 1250, 1.4, 0.50, 0.25);
+    noiseHit(o.g, now + 0.45, 1.10, "lowpass", 950, 180, 1.1, 0.42, 0.15);
+    toneSweep(o.g, now, 1.20, "sine", 190, 75, 0.22);
+    cleanup(nodes, 1.65);
+    return;
+  }
+
+  if (name === "bossRoar") {
+    const o = sfxOut(pan, 0.82);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 1.45, "lowpass", 520, 140, 2.0, 0.55, 0.08);
+    toneSweep(o.g, now, 1.40, "sawtooth", 118, 46, 0.38);
+    toneSweep(o.g, now + 0.06, 1.30, "sawtooth", 88, 39, 0.34);
+    cleanup(nodes, 1.55);
+    return;
+  }
+
+  if (name === "swordClash") {
+    const o = sfxOut(pan, 0.74);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 0.28, "highpass", 2200, 1100, 1.2, 0.50, 0.003);
+    toneSweep(o.g, now, 0.42, "triangle", 1680, 1420, 0.30);
+    toneSweep(o.g, now, 0.36, "sine", 2490, 2110, 0.24);
+    toneSweep(o.g, now, 0.14, "square", 620, 290, 0.16);
+    cleanup(nodes, 0.5);
+    return;
+  }
+
+  if (name === "bossFall") {
+    const o = sfxOut(pan, 0.88);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 0.75, "lowpass", 340, 65, 1.5, 0.68, 0.01);
+    toneSweep(o.g, now, 0.65, "sine", 92, 26, 0.58);
+    noiseHit(o.g, now + 0.28, 0.55, "bandpass", 520, 140, 2.2, 0.35, 0.02);
+    cleanup(nodes, 0.9);
+    return;
+  }
+
+  if (name === "hellhoundWhine") {
+    const o = sfxOut(pan, 0.52);
+    const nodes = [o.g];
+    toneSweep(o.g, now, 0.42, "triangle", 640, 390, 0.24);
+    toneSweep(o.g, now + 0.46, 0.48, "triangle", 540, 310, 0.20);
+    noiseHit(o.g, now, 0.85, "bandpass", 900, 450, 3.0, 0.15, 0.05);
+    cleanup(nodes, 1.0);
+    return;
+  }
+
+  if (name === "chainRattle") {
+    // Gatter hoch: etwa 3 s ruckendes Kettenrasseln mit zwei kurzen Pausen
+    const o = sfxOut(pan, 0.66);
+    const nodes = [o.g];
+    const bursts = [
+      0.0, 0.16, 0.32, 0.48, 0.64,
+      1.05, 1.21, 1.37, 1.53, 1.69,
+      2.10, 2.26, 2.42, 2.58, 2.74
+    ];
+    for (let i = 0; i < bursts.length; i++) {
+      const t0 = now + bursts[i];
+      noiseHit(o.g, t0, 0.11, "bandpass", 1950 + (i % 3) * 320, 1200, 3.8, 0.34, 0.005);
+      toneSweep(o.g, t0, 0.08, "square", 480 + (i % 4) * 55, 310, 0.12);
+    }
+    cleanup(nodes, 3.05);
+    return;
+  }
+
+  if (name === "gateSlam") {
+    const o = sfxOut(pan, 0.90);
+    const nodes = [o.g];
+    noiseHit(o.g, now, 0.65, "lowpass", 620, 75, 1.6, 0.72, 0.004);
+    toneSweep(o.g, now, 0.55, "sine", 110, 28, 0.62);
+    toneSweep(o.g, now, 0.38, "triangle", 420, 145, 0.30);
+    cleanup(nodes, 0.75);
+    return;
+  }
+
+  if (name === "doorCreak") {
+    // Tor auf: etwa 2.5 s tiefes Knarren (7 Knoten gesamt)
+    const o = sfxOut(pan, 0.64);
+    const dur = 2.5;
+    const filt = audioCtx.createBiquadFilter();
+    filt.type = "bandpass";
+    filt.frequency.setValueAtTime(195, now);
+    filt.frequency.linearRampToValueAtTime(280, now + 0.9);
+    filt.frequency.linearRampToValueAtTime(165, now + 1.8);
+    filt.frequency.linearRampToValueAtTime(230, now + dur);
+    filt.Q.value = 6.5;
+
+    const env = audioCtx.createGain();
+    env.gain.setValueAtTime(0.001, now);
+    env.gain.linearRampToValueAtTime(0.36, now + 0.25);
+    env.gain.setValueAtTime(0.28, now + 1.1);
+    env.gain.linearRampToValueAtTime(0.34, now + 1.7);
+    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    const osc1 = audioCtx.createOscillator();
+    osc1.type = "sawtooth";
+    osc1.frequency.setValueAtTime(68, now);
+    osc1.frequency.linearRampToValueAtTime(84, now + 1.0);
+    osc1.frequency.linearRampToValueAtTime(61, now + dur);
+
+    const osc2 = audioCtx.createOscillator();
+    osc2.type = "sawtooth";
+    osc2.frequency.setValueAtTime(71.5, now);
+    osc2.frequency.linearRampToValueAtTime(88.5, now + 1.0);
+    osc2.frequency.linearRampToValueAtTime(64.0, now + dur);
+
+    osc1.connect(filt);
+    osc2.connect(filt);
+    filt.connect(env);
+    env.connect(o.g);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + dur + 0.02);
+    osc2.stop(now + dur + 0.02);
+
+    noiseHit(o.g, now, dur, "lowpass", 240, 110, 1.4, 0.22, 0.2);
+    cleanup([o.g, filt, env, osc1, osc2], dur + 0.05);
+  }
 }

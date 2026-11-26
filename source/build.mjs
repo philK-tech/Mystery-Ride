@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Die Reihenfolge ist wichtig: alles läuft in einer gemeinsamen Funktion, spätere Dateien nutzen frühere.
-const FILES = ['setup.js', 'math.js', 'geometry.js', 'meshes.js', 'sdfmesh.js', 'procfig.js', 'vault.js', 'shaders.js', 'world.js', 'renderer.js', 'boat.js', 'creatures.js', 'audio.js', 'main.js'];
+const FILES = ['setup.js', 'math.js', 'geometry.js', 'meshes.js', 'sdfmesh.js', 'procfig.js', 'vault.js', 'gates.js', 'shaders.js', 'world.js', 'renderer.js', 'boat.js', 'creatures.js', 'audio.js', 'main.js'];
 
 const read = (f) => readFileSync(path.join(here, f), 'utf8').replace(/\r\n/g, '\n');
 const indent = (s, n) => s.split('\n').map((l) => (l ? ' '.repeat(n) + l : l)).join('\n');

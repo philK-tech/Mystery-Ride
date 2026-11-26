@@ -48,7 +48,7 @@ function riverBaseX(z) {
 const VAULT_BEND = 16.0;
 function vaultBend(z) {
   const d = -wrapZ(z);
-  return smoothstep(122.0, 160.0, d) * (1.0 - smoothstep(240.0, 287.0, d));
+  return smoothstep(112.0, 155.0, d) * (1.0 - smoothstep(240.0, 287.0, d));   // vor dem Tor gerade, damit man auf das Gatter zufährt
 }
 function riverCenterX(z) {
   return riverBaseX(z) + VAULT_BEND * vaultBend(z);
@@ -213,7 +213,7 @@ const Mat4 = {
 // Das Schloss auf seinem Felsen am Ende des Nebelwalds
 const CASTLE = (() => {
   const z = -150, side = 1;
-  const x = riverBaseX(z) + side * (riverHalfWidth(z) + 19.0);   // ohne den Abzweig: das Schloss bleibt, wo es war
+  const x = riverBaseX(z) + side * (riverHalfWidth(z) + 25.0);   // ohne den Abzweig, 6 m weiter rechts: der Fluss läuft am Fuß des Schlossfelsens ins Tor
   const gy = terrainHeight(x, z);
   return { x, z, side, gy, rockH: 16.0, top: gy - 2.0 + 16.0 * 0.93 + 28.0 };
 })();

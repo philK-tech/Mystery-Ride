@@ -619,3 +619,4 @@ function render(now) {
 requestAnimationFrame(render);
 // Testhilfe für automatische Prüfungen: Zustand der Fahrt abfragen
 window.__dbg = () => ({ td: state.travelDist, time: state.time, hash: location.hash, run: state.running, cam: Array.from(camEye), idx: scene.idx, st: scene.t, sp: scene.speed, duck: sceneDuck, stand: sceneStand, rock: sceneRock, foc: sceneFocusOn ? Array.from(sceneFocus) : null, vault: camVault, gaze: [gaze.yaw, gaze.pitch] });
+window.__vaultReport = () => vaultClearanceReport();
