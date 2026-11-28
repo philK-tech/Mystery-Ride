@@ -16,7 +16,6 @@ Ableger von [Alienworld](https://github.com/philK-tech/Alienworld): dieselbe pro
 
 ## Lizenz
 
-MIT, siehe `LICENSE`. Das gilt für den Quellcode. Ausnahmen:
+MIT, siehe `LICENSE`, einschließlich des selbst erstellten Bootsmodells. Ausnahme:
 
 - `source/tools/vigil-bake/vigil-kit/` und die daraus gebackenen Figuren in `source/assets/figures/` stammen aus „The Ninth Vigil“ (github.com/iamlukethedev/The-Ninth-Vigil, MIT, Copyright (c) 2026 iamlukethedev, Lizenztext in `vigil-kit/LICENSE`).
-- Bootsmodell und Textur in `source/assets/` unterliegen den Bedingungen ihrer Quelle.
